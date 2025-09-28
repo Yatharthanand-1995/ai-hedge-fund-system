@@ -1,0 +1,91 @@
+# Core dependencies for AI Hedge Fund System
+# Data processing and analysis
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Financial data and technical analysis
+yfinance>=0.2.18
+talib-binary>=0.4.24  # TA-Lib for technical indicators
+
+# Web framework for API
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+pydantic>=2.0.0
+
+# HTTP requests and async support
+requests>=2.31.0
+aiohttp>=3.8.0
+httpx>=0.24.0
+
+# Plotting and visualization (optional)
+matplotlib>=3.7.0
+plotly>=5.15.0
+
+# Logging and utilities
+python-dateutil>=2.8.0
+python-dotenv>=1.0.0
+
+# Testing (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Development tools (optional)
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+
+# Additional scientific computing
+scikit-learn>=1.3.0
+
+# Time zone handling
+pytz>=2023.3
+
+# For caching and serialization
+pickle-mixin>=1.0.2
+
+# Jupyter support (optional)
+jupyter>=1.0.0
+ipykernel>=6.25.0
+
+# Progress bars and CLI utilities
+tqdm>=4.65.0
+click>=8.1.0
+
+# Memory optimization
+psutil>=5.9.0
+
+# Type hints support
+typing-extensions>=4.7.0
+
+# Threading and concurrency
+concurrent-futures>=3.1.1  # For Python < 3.2, usually built-in
+
+# Configuration management
+pyyaml>=6.0
+
+# Enhanced AI/ML Components for Production Hedge Fund System
+redis>=4.5.0  # Caching and real-time data
+websockets>=11.0.0  # Real-time streaming
+prometheus-client>=0.19.0  # Monitoring
+
+# Advanced AI/ML for sentiment and regime detection
+hmmlearn>=0.3.0  # Hidden Markov Models for regime detection
+openai>=1.0.0  # GPT-based sentiment analysis (optional)
+anthropic>=0.8.0  # Claude API alternative for sentiment (optional)
+torch>=2.0.0  # PyTorch for advanced ML models (optional)
+tensorboard>=2.14.0  # Model monitoring (optional)
+mlflow>=2.8.0  # Model versioning and tracking (optional)
+
+# News and sentiment data sources
+newsapi-python>=0.2.7  # News API for sentiment (optional)
+praw>=7.7.0  # Reddit API for social sentiment (optional)
+beautifulsoup4>=4.12.0  # Web scraping for news
+lxml>=4.9.0  # XML parsing for feeds
+
+# Database support (optional)
+psycopg2-binary>=2.9.0  # PostgreSQL
+sqlalchemy>=2.0.0  # ORM
+
+# Async support
+aioredis>=2.0.0  # Async Redis client
