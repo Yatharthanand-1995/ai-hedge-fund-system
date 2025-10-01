@@ -20,9 +20,10 @@ interface ActionItem {
 
 interface CommandCenterProps {
   className?: string;
+  onPageChange?: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void;
 }
 
-export const CommandCenter: React.FC<CommandCenterProps> = ({ className }) => {
+export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageChange }) => {
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissedItems, setDismissedItems] = useState<Set<string>>(new Set());
@@ -185,20 +186,24 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className }) => {
   const handleAction = (item: ActionItem) => {
     console.log('Action clicked:', item);
 
-    // Navigate or trigger action based on item
-    if (item.action.data?.page) {
-      // In a real app, this would use router navigation
-      console.log(`Navigate to: ${item.action.data.page}`);
+    // Navigate to specific pages
+    if (item.action.data?.page && onPageChange) {
+      const page = item.action.data.page as 'dashboard' | 'analysis' | 'portfolio' | 'backtesting';
+      onPageChange(page);
+      return;
     }
 
-    if (item.action.data?.symbol) {
-      // Open stock analysis
-      console.log(`Analyze: ${item.action.data.symbol}`);
+    // Navigate to analysis page for stock symbols
+    if (item.action.data?.symbol && onPageChange) {
+      // For now, navigate to analysis page
+      // In the future, could open a modal with the specific stock
+      onPageChange('analysis');
+      return;
     }
 
-    // Could implement actual trading actions here
+    // Trading actions (future implementation)
     if (item.action.type === 'buy' || item.action.type === 'sell') {
-      alert(`${item.action.type.toUpperCase()} action for ${item.symbol} - Integration pending`);
+      alert(`${item.action.type.toUpperCase()} action for ${item.symbol} - Trading integration coming soon!`);
     }
   };
 
