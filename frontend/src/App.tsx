@@ -15,6 +15,7 @@ import { RiskManagementPanel } from './components/dashboard/RiskManagementPanel'
 import { BacktestResultsPanel } from './components/dashboard/BacktestResultsPanel';
 import { InvestmentGuidePanel } from './components/dashboard/InvestmentGuidePanel';
 import { CommandCenter } from './components/dashboard/CommandCenter';
+import { SmartFilterBar, FilterOptions, SortOption } from './components/dashboard/SmartFilterBar';
 import { FEATURE_FLAGS } from './config/featureFlags';
 
 console.log('🚀 App.tsx loaded successfully');
@@ -83,6 +84,15 @@ const queryClient = new QueryClient({
 const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void }> = ({ onPageChange }) => {
   const [topPicks, setTopPicks] = useState<any[]>([]);
   const [isLoadingPicks, setIsLoadingPicks] = useState(true);
+  const [filters, setFilters] = useState<FilterOptions>({
+    sector: [],
+    scoreRange: 'all',
+    riskLevel: [],
+    consensus: [],
+    priceRange: 'all',
+    searchQuery: ''
+  });
+  const [sortBy, setSortBy] = useState<SortOption>('score-desc');
 
   // Fetch real top picks data on mount
   React.useEffect(() => {
@@ -123,6 +133,78 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
     console.log(`Action ${action.type} clicked for ${symbol}`, action);
     // In a real app, this would trigger actual trading actions
   };
+
+  // Filter and sort picks
+  const filteredAndSortedPicks = React.useMemo(() => {
+    let result = [...topPicks];
+
+    // Apply search filter
+    if (filters.searchQuery) {
+      const query = filters.searchQuery.toLowerCase();
+      result = result.filter(pick =>
+        pick.symbol.toLowerCase().includes(query) ||
+        pick.recommendation?.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply sector filter (would need sector data from backend)
+    if (filters.sector.length > 0) {
+      // For now, skip sector filtering until we have sector data
+      // result = result.filter(pick => filters.sector.includes(pick.sector));
+    }
+
+    // Apply score range filter
+    if (filters.scoreRange !== 'all') {
+      result = result.filter(pick => {
+        const score = pick.overall_score;
+        switch (filters.scoreRange) {
+          case 'strong-buy': return score >= 80;
+          case 'buy': return score >= 65 && score < 80;
+          case 'hold': return score >= 45 && score < 65;
+          case 'sell': return score < 45;
+          default: return true;
+        }
+      });
+    }
+
+    // Apply risk level filter
+    if (filters.riskLevel.length > 0) {
+      result = result.filter(pick => {
+        const riskLevel = pick.riskLevel || (pick.overall_score > 70 ? 'Low' : pick.overall_score > 50 ? 'Medium' : 'High');
+        return filters.riskLevel.includes(riskLevel);
+      });
+    }
+
+    // Apply price range filter
+    if (filters.priceRange !== 'all') {
+      result = result.filter(pick => {
+        const price = pick.market_data?.current_price || 0;
+        switch (filters.priceRange) {
+          case '0-50': return price >= 0 && price <= 50;
+          case '50-200': return price > 50 && price <= 200;
+          case '200-500': return price > 200 && price <= 500;
+          case '500+': return price > 500;
+          default: return true;
+        }
+      });
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'score-desc': return b.overall_score - a.overall_score;
+        case 'score-asc': return a.overall_score - b.overall_score;
+        case 'price-desc': return (b.market_data?.current_price || 0) - (a.market_data?.current_price || 0);
+        case 'price-asc': return (a.market_data?.current_price || 0) - (b.market_data?.current_price || 0);
+        case 'momentum-desc': return (b.agent_scores?.momentum || 0) - (a.agent_scores?.momentum || 0);
+        case 'alpha-asc': return a.symbol.localeCompare(b.symbol);
+        case 'alpha-desc': return b.symbol.localeCompare(a.symbol);
+        default: return 0;
+      }
+    });
+
+    return result;
+  }, [topPicks, filters, sortBy]);
 
   return (
     <div className="space-y-8">
@@ -182,6 +264,16 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
             View All →
           </button>
         </div>
+
+        {/* Smart Filter Bar */}
+        <SmartFilterBar
+          onFilterChange={setFilters}
+          onSortChange={setSortBy}
+          totalCount={topPicks.length}
+          filteredCount={filteredAndSortedPicks.length}
+          className="mb-6"
+        />
+
         {isLoadingPicks ? (
           <div className="professional-card p-8">
             <div className="flex items-center justify-center space-x-3">
@@ -189,9 +281,14 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
               <span className="text-muted-foreground">Loading intelligent recommendations...</span>
             </div>
           </div>
+        ) : filteredAndSortedPicks.length === 0 ? (
+          <div className="professional-card p-8 text-center">
+            <p className="text-muted-foreground text-lg mb-2">No stocks match your filters</p>
+            <p className="text-sm text-muted-foreground">Try adjusting your filter criteria</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {topPicks.slice(0, 6).map((pick, index) => (
+            {filteredAndSortedPicks.map((pick, index) => (
               <IntelligentStockCard
                 key={pick.symbol}
                 stock={pick}
