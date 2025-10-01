@@ -14,6 +14,8 @@ import { ActionableInsightsPanel } from './components/dashboard/ActionableInsigh
 import { RiskManagementPanel } from './components/dashboard/RiskManagementPanel';
 import { BacktestResultsPanel } from './components/dashboard/BacktestResultsPanel';
 import { InvestmentGuidePanel } from './components/dashboard/InvestmentGuidePanel';
+import { CommandCenter } from './components/dashboard/CommandCenter';
+import { FEATURE_FLAGS } from './config/featureFlags';
 
 console.log('🚀 App.tsx loaded successfully');
 
@@ -133,6 +135,11 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
           Professional-grade investment analysis with 4-agent intelligence
         </p>
       </div>
+
+      {/* Command Center - Action Items (NEW) */}
+      {FEATURE_FLAGS.USE_COMMAND_CENTER && (
+        <CommandCenter className="mb-8" />
+      )}
 
       {/* Investment Guide - How to Use */}
       <InvestmentGuidePanel className="mb-8" />

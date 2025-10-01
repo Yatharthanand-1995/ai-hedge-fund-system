@@ -10,6 +10,7 @@ export interface FeatureFlags {
   USE_ENHANCED_DASHBOARD: boolean;
 
   // Component Enhancements
+  USE_COMMAND_CENTER: boolean;
   USE_ADVANCED_CHARTS: boolean;
   USE_REAL_TIME_UPDATES: boolean;
   USE_ENHANCED_PORTFOLIO_VIEW: boolean;
@@ -33,6 +34,7 @@ export const defaultFeatureFlags: FeatureFlags = {
   USE_ENHANCED_DASHBOARD: false,
 
   // Component Enhancements
+  USE_COMMAND_CENTER: true, // NEW - ON by default (ready for production)
   USE_ADVANCED_CHARTS: false,
   USE_REAL_TIME_UPDATES: false,
   USE_ENHANCED_PORTFOLIO_VIEW: false,

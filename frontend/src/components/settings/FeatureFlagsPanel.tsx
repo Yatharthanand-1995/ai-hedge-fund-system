@@ -34,6 +34,7 @@ export const FeatureFlagsPanel: React.FC<FeatureFlagsPanelProps> = ({ isOpen, on
       { key: 'USE_ENHANCED_DASHBOARD', label: 'Enhanced Dashboard', description: 'New improved dashboard layout' },
     ],
     'Component Enhancements': [
+      { key: 'USE_COMMAND_CENTER', label: 'Command Center', description: 'Action-focused task panel at top' },
       { key: 'USE_ADVANCED_CHARTS', label: 'Advanced Charts', description: 'Enhanced chart visualizations' },
       { key: 'USE_REAL_TIME_UPDATES', label: 'Real-Time Updates', description: 'Live data streaming' },
       { key: 'USE_ENHANCED_PORTFOLIO_VIEW', label: 'Enhanced Portfolio', description: 'Improved portfolio display' },
