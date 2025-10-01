@@ -34,155 +34,25 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
   const [viewMode, setViewMode] = useState<'consensus' | 'performance'>('consensus');
 
   useEffect(() => {
-    // Simulate fetching consensus data
+    // Fetch real consensus data from API
     const fetchConsensusData = async () => {
       try {
-        const mockData: ConsensusData[] = [
-          {
-            symbol: 'AAPL',
-            overallScore: 78.5,
-            consensus: 'strong',
-            agreement: 92,
-            conflictAreas: [],
-            topReason: 'Strong fundamentals with excellent momentum',
-            agents: [
-              {
-                name: 'Fundamentals',
-                score: 82,
-                confidence: 0.95,
-                weight: 40,
-                accuracy: 87,
-                reasoning: 'Excellent profitability metrics and strong balance sheet',
-                status: 'healthy'
-              },
-              {
-                name: 'Momentum',
-                score: 75,
-                confidence: 0.88,
-                weight: 30,
-                accuracy: 82,
-                reasoning: 'Strong price momentum with bullish technical indicators',
-                status: 'healthy'
-              },
-              {
-                name: 'Quality',
-                score: 85,
-                confidence: 0.92,
-                weight: 20,
-                accuracy: 90,
-                reasoning: 'High-quality business with strong competitive moat',
-                status: 'healthy'
-              },
-              {
-                name: 'Sentiment',
-                score: 70,
-                confidence: 0.85,
-                weight: 10,
-                accuracy: 78,
-                reasoning: 'Mixed sentiment with analyst upgrades',
-                status: 'healthy'
-              }
-            ]
-          },
-          {
-            symbol: 'TSLA',
-            overallScore: 65.2,
-            consensus: 'weak',
-            agreement: 65,
-            conflictAreas: ['Valuation', 'Risk Assessment'],
-            topReason: 'High growth potential but elevated valuation concerns',
-            agents: [
-              {
-                name: 'Fundamentals',
-                score: 45,
-                confidence: 0.78,
-                weight: 40,
-                accuracy: 87,
-                reasoning: 'High valuation multiples concern fundamental analysis',
-                status: 'degraded'
-              },
-              {
-                name: 'Momentum',
-                score: 85,
-                confidence: 0.91,
-                weight: 30,
-                accuracy: 82,
-                reasoning: 'Very strong momentum with breakout patterns',
-                status: 'healthy'
-              },
-              {
-                name: 'Quality',
-                score: 72,
-                confidence: 0.86,
-                weight: 20,
-                accuracy: 90,
-                reasoning: 'Innovative company but execution risks remain',
-                status: 'healthy'
-              },
-              {
-                name: 'Sentiment',
-                score: 80,
-                confidence: 0.89,
-                weight: 10,
-                accuracy: 78,
-                reasoning: 'Very positive sentiment around EV adoption',
-                status: 'healthy'
-              }
-            ]
-          },
-          {
-            symbol: 'MSFT',
-            overallScore: 81.3,
-            consensus: 'strong',
-            agreement: 94,
-            conflictAreas: [],
-            topReason: 'Excellent across all metrics with cloud growth',
-            agents: [
-              {
-                name: 'Fundamentals',
-                score: 85,
-                confidence: 0.96,
-                weight: 40,
-                accuracy: 87,
-                reasoning: 'Strong cloud revenue growth and margins',
-                status: 'healthy'
-              },
-              {
-                name: 'Momentum',
-                score: 78,
-                confidence: 0.90,
-                weight: 30,
-                accuracy: 82,
-                reasoning: 'Steady uptrend with strong volume support',
-                status: 'healthy'
-              },
-              {
-                name: 'Quality',
-                score: 88,
-                confidence: 0.95,
-                weight: 20,
-                accuracy: 90,
-                reasoning: 'Exceptional business quality and market position',
-                status: 'healthy'
-              },
-              {
-                name: 'Sentiment',
-                score: 75,
-                confidence: 0.87,
-                weight: 10,
-                accuracy: 78,
-                reasoning: 'Positive sentiment on AI and cloud initiatives',
-                status: 'healthy'
-              }
-            ]
-          }
-        ];
+        setLoading(true);
+        // Fetch consensus data for top stocks
+        const response = await fetch('http://localhost:8010/analyze/consensus?symbols=AAPL,MSFT,GOOGL,NVDA,TSLA');
 
-        setTimeout(() => {
-          setConsensusData(mockData);
-          setSelectedStock(mockData[0].symbol);
-          setLoading(false);
-        }, 1000);
+        if (!response.ok) {
+          throw new Error('Failed to fetch consensus data');
+        }
+
+        const data = await response.json();
+        const consensusArray: ConsensusData[] = data.consensus || [];
+
+        setConsensusData(consensusArray);
+        if (consensusArray.length > 0) {
+          setSelectedStock(consensusArray[0].symbol);
+        }
+        setLoading(false);
       } catch (error) {
         console.error('Failed to fetch consensus data:', error);
         setLoading(false);

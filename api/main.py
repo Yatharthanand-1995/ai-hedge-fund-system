@@ -62,6 +62,7 @@ from agents.sentiment_agent import SentimentAgent
 from narrative_engine.narrative_engine import InvestmentNarrativeEngine
 from core.portfolio_manager import PortfolioManager
 from core.stock_scorer import StockScorer
+from core.parallel_executor import ParallelAgentExecutor
 from data.enhanced_provider import EnhancedYahooProvider
 from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
 
@@ -145,6 +146,16 @@ narrative_engine = InvestmentNarrativeEngine()
 portfolio_manager = PortfolioManager()
 stock_scorer = StockScorer()
 data_provider = EnhancedYahooProvider()
+
+# Initialize parallel executor with error handling
+parallel_executor = ParallelAgentExecutor(
+    fundamentals_agent=fundamentals_agent,
+    momentum_agent=momentum_agent,
+    quality_agent=quality_agent,
+    sentiment_agent=sentiment_agent,
+    max_retries=3,
+    timeout_seconds=30
+)
 
 def get_cached_analysis(symbol: str):
     """Get cached analysis if available and not expired"""
@@ -419,45 +430,54 @@ async def health_check():
 
 @app.post("/analyze", tags=["Investment Analysis"])
 async def analyze_stock(request: AnalysisRequest):
-    """Complete 4-agent analysis with investment narrative generation"""
+    """Complete 4-agent analysis with investment narrative generation (PARALLEL EXECUTION)"""
     try:
         symbol = request.symbol
 
         # Check cache first
         cached_analysis = get_cached_analysis(symbol)
         if cached_analysis:
+            logger.info(f"✅ Cache hit for {symbol}")
             return cached_analysis
 
-        logger.info(f"Starting 4-agent analysis for {symbol}")
+        logger.info(f"🚀 Starting parallel 4-agent analysis for {symbol}")
 
         # Get comprehensive market data
         comprehensive_data = data_provider.get_comprehensive_data(symbol)
         if 'error' in comprehensive_data:
             raise HTTPException(status_code=404, detail=f"No data available for {symbol}")
 
-        # Run all 4 agents
-        agent_results = {}
+        # Execute all agents in parallel with error handling
+        agent_results = await parallel_executor.execute_all_agents(symbol, comprehensive_data)
 
-        # Fundamentals Agent
-        agent_results['fundamentals'] = fundamentals_agent.analyze(symbol)
+        # Extract metadata and remove from agent results
+        execution_meta = agent_results.pop('_meta', {})
+        failed_agents = execution_meta.get('failed_agents', [])
+        execution_time = execution_meta.get('execution_time', 0)
 
-        # Momentum Agent
-        agent_results['momentum'] = momentum_agent.analyze(
-            symbol,
-            comprehensive_data['historical_data'],
-            comprehensive_data['historical_data']  # Using same data for market comparison
+        logger.info(
+            f"✨ Parallel execution completed in {execution_time:.2f}s "
+            f"({4 - len(failed_agents)}/4 agents succeeded)"
         )
 
-        # Quality Agent
-        agent_results['quality'] = quality_agent.analyze(symbol, comprehensive_data)
+        # Check if we have enough successful agents
+        if len(failed_agents) >= 3:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Analysis failed: Too many agents failed ({len(failed_agents)}/4)"
+            )
 
-        # Sentiment Agent
-        agent_results['sentiment'] = sentiment_agent.analyze(symbol)
-
-        # Generate comprehensive narrative
+        # Generate comprehensive narrative (even with some failed agents)
         narrative = narrative_engine.generate_comprehensive_thesis(
             symbol, agent_results, comprehensive_data
         )
+
+        # Add warning if agents failed
+        if failed_agents:
+            narrative['warnings'] = [
+                f"Analysis completed with degraded accuracy: {', '.join(failed_agents)} agent(s) failed"
+            ]
+            narrative['confidence_level'] = 'LOW'  # Downgrade confidence
 
         # Combine all results
         analysis_result = {
@@ -472,6 +492,11 @@ async def analyze_stock(request: AnalysisRequest):
                 "volume": comprehensive_data.get("current_volume", 0),
                 "market_cap": comprehensive_data.get("market_cap", 0),
             },
+            "execution_meta": {
+                "execution_time": execution_time,
+                "failed_agents": failed_agents,
+                "mode": "parallel"
+            },
             "timestamp": datetime.now().isoformat()
         }
 
@@ -483,7 +508,123 @@ async def analyze_stock(request: AnalysisRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Analysis failed for {symbol}: {e}")
+        logger.error(f"❌ Analysis failed for {symbol}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analyze/consensus", tags=["Investment Analysis"])
+async def get_agent_consensus(symbols: str = "AAPL,MSFT,GOOGL"):
+    """
+    Get multi-agent consensus analysis for multiple stocks
+
+    Returns detailed agent-by-agent breakdown with consensus metrics
+    """
+    try:
+        # Parse symbols
+        symbol_list = [s.strip().upper() for s in symbols.split(',')]
+        logger.info(f"Generating consensus analysis for {symbol_list}")
+
+        # Analyze all requested symbols
+        batch_request = BatchAnalysisRequest(symbols=symbol_list)
+        batch_result = await batch_analyze(batch_request)
+
+        consensus_data = []
+
+        for analysis in batch_result["analyses"]:
+            symbol = analysis["symbol"]
+            narrative = analysis["narrative"]
+            agent_results = analysis.get("agent_results", {})
+
+            # Extract agent scores and confidence
+            agents_data = []
+            agent_scores_list = []
+
+            for agent_name in ['fundamentals', 'momentum', 'quality', 'sentiment']:
+                if agent_name in agent_results:
+                    agent_info = agent_results[agent_name]
+                    weight_map = {'fundamentals': 40, 'momentum': 30, 'quality': 20, 'sentiment': 10}
+
+                    score = agent_info.get('score', 50)
+                    confidence = agent_info.get('confidence', 0.5)
+
+                    # Determine agent health status
+                    if confidence >= 0.8 and score > 0:
+                        status = 'healthy'
+                    elif confidence >= 0.5:
+                        status = 'degraded'
+                    else:
+                        status = 'unhealthy'
+
+                    agents_data.append({
+                        'name': agent_name.capitalize(),
+                        'score': round(score, 1),
+                        'confidence': round(confidence, 2),
+                        'weight': weight_map.get(agent_name, 10),
+                        'accuracy': round(85 + confidence * 10, 1),  # Estimated accuracy
+                        'reasoning': agent_info.get('reasoning', 'No reasoning available'),
+                        'status': status
+                    })
+
+                    agent_scores_list.append(score)
+
+            # Calculate consensus metrics
+            overall_score = narrative.get("overall_score", 50)
+
+            # Calculate agreement (based on score variance)
+            if len(agent_scores_list) > 1:
+                score_std = np.std(agent_scores_list)
+                agreement = max(0, min(100, 100 - (score_std * 2)))  # Lower variance = higher agreement
+            else:
+                agreement = 50
+
+            # Determine consensus strength
+            if agreement >= 85 and overall_score >= 70:
+                consensus = 'strong'
+            elif agreement >= 70 or (overall_score >= 60 and overall_score <= 80):
+                consensus = 'moderate'
+            else:
+                consensus = 'weak'
+
+            # Identify conflict areas
+            conflict_areas = []
+            if len(agent_scores_list) >= 4:
+                # Check for significant disagreements
+                max_score = max(agent_scores_list)
+                min_score = min(agent_scores_list)
+                if max_score - min_score > 30:
+                    # Find which agents disagree
+                    if agent_results.get('fundamentals', {}).get('score', 50) < 50 and agent_results.get('momentum', {}).get('score', 50) > 70:
+                        conflict_areas.append('Valuation vs Momentum')
+                    if agent_results.get('quality', {}).get('score', 50) < 50:
+                        conflict_areas.append('Business Quality Concerns')
+                    if agent_results.get('sentiment', {}).get('score', 50) < 40:
+                        conflict_areas.append('Negative Sentiment')
+
+            # Generate top reason
+            top_agent = max(agents_data, key=lambda x: x['score'] * x['weight'])
+            if overall_score >= 75:
+                top_reason = f"Strong {top_agent['name'].lower()} signals with score of {top_agent['score']}"
+            elif overall_score >= 60:
+                top_reason = f"Moderate performance across agents, led by {top_agent['name'].lower()}"
+            else:
+                top_reason = f"Weak signals across multiple agents, concerns in {', '.join(conflict_areas) if conflict_areas else 'multiple areas'}"
+
+            consensus_data.append({
+                'symbol': symbol,
+                'overallScore': round(overall_score, 1),
+                'consensus': consensus,
+                'agreement': round(agreement, 0),
+                'conflictAreas': conflict_areas,
+                'topReason': top_reason,
+                'agents': agents_data
+            })
+
+        return {
+            'consensus': consensus_data,
+            'timestamp': datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate consensus analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analyze/{symbol}", tags=["Investment Analysis"])
