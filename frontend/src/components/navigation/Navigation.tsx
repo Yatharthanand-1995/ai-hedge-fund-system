@@ -2,8 +2,8 @@ import React from 'react';
 import { cn } from '../../utils';
 
 interface NavigationProps {
-  currentPage: 'dashboard' | 'analysis' | 'portfolio';
-  onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio') => void;
+  currentPage: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting';
+  onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -14,6 +14,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'dashboard' as const, label: 'System Overview', icon: '🏦' },
     { id: 'analysis' as const, label: 'Stock Analysis', icon: '📊' },
     { id: 'portfolio' as const, label: 'Portfolio Manager', icon: '📈' },
+    { id: 'backtesting' as const, label: '5-Year Backtest', icon: '📉' },
   ];
 
   return (

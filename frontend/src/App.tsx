@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Navigation } from './components/navigation/Navigation';
 import { StockAnalysisPage } from './pages/StockAnalysisPage';
 import { PortfolioPage } from './pages/PortfolioPage';
+import { BacktestingPage } from './pages/BacktestingPage';
 import { PortfolioSummaryPanel } from './components/dashboard/PortfolioSummaryPanel';
 import { IntelligentStockCard } from './components/dashboard/IntelligentStockCard';
 import { SectorAllocationPanel } from './components/dashboard/SectorAllocationPanel';
@@ -11,6 +13,59 @@ import { MultiAgentConsensusPanel } from './components/dashboard/MultiAgentConse
 import { ActionableInsightsPanel } from './components/dashboard/ActionableInsightsPanel';
 import { RiskManagementPanel } from './components/dashboard/RiskManagementPanel';
 import { BacktestResultsPanel } from './components/dashboard/BacktestResultsPanel';
+import { InvestmentGuidePanel } from './components/dashboard/InvestmentGuidePanel';
+
+console.log('🚀 App.tsx loaded successfully');
+
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    console.error('❌ Error Boundary caught error:', error);
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('❌ Error details:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px', backgroundColor: '#1a1a1a', color: '#fff', minHeight: '100vh' }}>
+          <h1>⚠️ Application Error</h1>
+          <p>Something went wrong. Please check the console for details.</p>
+          <pre style={{ backgroundColor: '#2a2a2a', padding: '20px', borderRadius: '8px', overflow: 'auto' }}>
+            {this.state.error?.toString()}
+            {'\n\n'}
+            {this.state.error?.stack}
+          </pre>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ marginTop: '20px', padding: '10px 20px', cursor: 'pointer' }}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // Create a client
 const queryClient = new QueryClient({
@@ -23,7 +78,7 @@ const queryClient = new QueryClient({
 });
 
 // Enhanced Professional Dashboard Component
-const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio') => void }> = ({ onPageChange }) => {
+const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void }> = ({ onPageChange }) => {
   const [topPicks, setTopPicks] = useState<any[]>([]);
   const [isLoadingPicks, setIsLoadingPicks] = useState(true);
 
@@ -79,6 +134,9 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
         </p>
       </div>
 
+      {/* Investment Guide - How to Use */}
+      <InvestmentGuidePanel className="mb-8" />
+
       {/* Executive Summary - Top Priority */}
       <PortfolioSummaryPanel className="mb-8" />
 
@@ -101,9 +159,6 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 
       {/* Risk Management Section */}
       <RiskManagementPanel className="mb-8" />
-
-      {/* Backtesting Results Section */}
-      <BacktestResultsPanel className="mb-8" />
 
       {/* Intelligent Stock Recommendations */}
       <div className="mb-8">
@@ -140,7 +195,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
       {/* Quick Navigation */}
       <div className="professional-card p-6">
         <h2 className="text-xl font-bold text-foreground mb-4">Professional Tools</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <button
             onClick={() => onPageChange('analysis')}
             className="text-center p-6 border border-border rounded-lg hover:border-accent hover:bg-muted/20 transition-all cursor-pointer"
@@ -164,6 +219,17 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
             <div className="mt-2 text-accent text-sm font-medium">Optimize →</div>
           </button>
           <button
+            onClick={() => onPageChange('backtesting')}
+            className="text-center p-6 border border-border rounded-lg hover:border-accent hover:bg-muted/20 transition-all cursor-pointer"
+          >
+            <div className="text-3xl mb-2">📉</div>
+            <h3 className="font-semibold mb-2">5-Year Backtest</h3>
+            <p className="text-muted-foreground text-sm">
+              Historical performance analysis with real market data
+            </p>
+            <div className="mt-2 text-accent text-sm font-medium">View Results →</div>
+          </button>
+          <button
             onClick={() => window.open('http://localhost:8010/docs', '_blank')}
             className="text-center p-6 border border-border rounded-lg hover:border-accent hover:bg-muted/20 transition-all cursor-pointer"
           >
@@ -182,21 +248,44 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 
 // Main App Component
 function App() {
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio'>('dashboard');
+  console.log('🎯 App component rendering...');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting'>('dashboard');
+  console.log('📄 Current page:', currentPage);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-background">
-        <div className="max-w-7xl mx-auto p-6">
-          <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
-          {currentPage === 'dashboard' && <Dashboard onPageChange={setCurrentPage} />}
-          {currentPage === 'analysis' && <StockAnalysisPage />}
-          {currentPage === 'portfolio' && <PortfolioPage />}
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <div className="min-h-screen bg-background">
+          <div className="max-w-7xl mx-auto p-6">
+            <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+            {currentPage === 'dashboard' && (
+              <ErrorBoundary>
+                <Dashboard onPageChange={setCurrentPage} />
+              </ErrorBoundary>
+            )}
+            {currentPage === 'analysis' && (
+              <ErrorBoundary>
+                <StockAnalysisPage />
+              </ErrorBoundary>
+            )}
+            {currentPage === 'portfolio' && (
+              <ErrorBoundary>
+                <PortfolioPage />
+              </ErrorBoundary>
+            )}
+            {currentPage === 'backtesting' && (
+              <ErrorBoundary>
+                <BacktestingPage />
+              </ErrorBoundary>
+            )}
+          </div>
         </div>
-      </div>
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+        <ReactQueryDevtools initialIsOpen={false} />
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
+
+console.log('✅ App component defined');
 
 export default App;
