@@ -138,7 +138,11 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 
       {/* Command Center - Action Items (NEW) */}
       {FEATURE_FLAGS.USE_COMMAND_CENTER && (
-        <CommandCenter className="mb-8" onPageChange={onPageChange} />
+        <CommandCenter
+          className="mb-8"
+          onPageChange={onPageChange}
+          currentPage="dashboard"
+        />
       )}
 
       {/* Investment Guide - How to Use */}

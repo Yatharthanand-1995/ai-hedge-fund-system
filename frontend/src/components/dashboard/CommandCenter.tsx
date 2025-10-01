@@ -21,9 +21,10 @@ interface ActionItem {
 interface CommandCenterProps {
   className?: string;
   onPageChange?: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void;
+  currentPage?: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting';
 }
 
-export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageChange }) => {
+export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageChange, currentPage = 'dashboard' }) => {
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissedItems, setDismissedItems] = useState<Set<string>>(new Set());
@@ -186,6 +187,7 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
   const handleAction = (item: ActionItem) => {
     console.log('🎯 Action clicked:', item);
     console.log('📍 onPageChange available:', !!onPageChange);
+    console.log('📄 Current page:', currentPage);
 
     // Navigate to specific pages
     if (item.action.data?.page) {
@@ -198,11 +200,22 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
         return;
       }
 
-      // If navigating to dashboard, scroll to top for visual feedback
-      if (page === 'dashboard') {
+      // Check if already on the target page
+      if (currentPage === page) {
+        console.log('✅ Already on this page, scrolling to top instead');
         window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // Show brief feedback
+        const pageName = page === 'dashboard' ? 'Dashboard' :
+                        page === 'analysis' ? 'Stock Analysis' :
+                        page === 'portfolio' ? 'Portfolio' : 'Backtesting';
+
+        // Could add a toast notification here instead
+        console.log(`ℹ️ Already viewing ${pageName} page`);
+        return;
       }
 
+      // Navigate to new page
       onPageChange(page);
       console.log(`✅ Successfully navigated to: ${page}`);
       return;
