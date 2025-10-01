@@ -184,12 +184,27 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
   };
 
   const handleAction = (item: ActionItem) => {
-    console.log('Action clicked:', item);
+    console.log('🎯 Action clicked:', item);
+    console.log('📍 onPageChange available:', !!onPageChange);
 
     // Navigate to specific pages
-    if (item.action.data?.page && onPageChange) {
+    if (item.action.data?.page) {
       const page = item.action.data.page as 'dashboard' | 'analysis' | 'portfolio' | 'backtesting';
+      console.log('🚀 Attempting navigation to:', page);
+
+      if (!onPageChange) {
+        console.error('❌ onPageChange is not defined!');
+        alert('Navigation error: onPageChange callback not provided');
+        return;
+      }
+
+      // If navigating to dashboard, scroll to top for visual feedback
+      if (page === 'dashboard') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
       onPageChange(page);
+      console.log(`✅ Successfully navigated to: ${page}`);
       return;
     }
 
@@ -198,6 +213,7 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
       // For now, navigate to analysis page
       // In the future, could open a modal with the specific stock
       onPageChange('analysis');
+      console.log(`✅ Opening analysis for: ${item.action.data.symbol}`);
       return;
     }
 
