@@ -47,7 +47,7 @@ class EnhancedYahooProvider:
         self.rate_limit_delay = rate_limit_delay
         self.cache = {}
         self.cache_expiry = {}
-        self.cache_duration = 900  # 15 minutes cache
+        self.cache_duration = 1200  # 20 minutes cache (extended for 50-stock universe)
 
     def get_comprehensive_data(self, symbol: str) -> Dict:
         """Get comprehensive stock data including all technical indicators"""

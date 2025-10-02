@@ -51,11 +51,11 @@ export const StockAnalysisPage: React.FC = () => {
     direction: 'desc'
   });
 
-  // Fetch top 20 stocks from the API
+  // Fetch top 50 stocks from the API
   const { data: response, isLoading, error, refetch } = useQuery({
-    queryKey: ['top-picks', 20],
+    queryKey: ['top-picks', 50],
     queryFn: async () => {
-      const res = await fetch('http://localhost:8010/portfolio/top-picks?limit=20');
+      const res = await fetch('http://localhost:8010/portfolio/top-picks?limit=50');
       if (!res.ok) throw new Error('Failed to fetch stocks');
       return res.json();
     },
@@ -193,7 +193,7 @@ export const StockAnalysisPage: React.FC = () => {
             📊 AI Stock Screener
           </h1>
           <p className="text-xl text-muted-foreground">
-            Real-time analysis of 20 elite stocks powered by 4-agent AI system
+            Real-time analysis of 50 elite stocks powered by 4-agent AI system
           </p>
         </div>
 

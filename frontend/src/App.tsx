@@ -15,7 +15,8 @@ import { RiskManagementPanel } from './components/dashboard/RiskManagementPanel'
 import { BacktestResultsPanel } from './components/dashboard/BacktestResultsPanel';
 import { InvestmentGuidePanel } from './components/dashboard/InvestmentGuidePanel';
 import { CommandCenter } from './components/dashboard/CommandCenter';
-import { SmartFilterBar, FilterOptions, SortOption } from './components/dashboard/SmartFilterBar';
+import { SmartFilterBar } from './components/dashboard/SmartFilterBar';
+import type { FilterOptions, SortOption } from './types/filters';
 import { FEATURE_FLAGS } from './config/featureFlags';
 
 console.log('🚀 App.tsx loaded successfully');
@@ -99,7 +100,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
     const fetchTopPicks = async () => {
       try {
         setIsLoadingPicks(true);
-        const response = await fetch('http://localhost:8010/portfolio/top-picks?limit=6');
+        const response = await fetch('http://localhost:8010/portfolio/top-picks?limit=12');
         if (response.ok) {
           const data = await response.json();
           const enhancedPicks = data.top_picks?.map((pick: any, index: number) => ({
@@ -287,7 +288,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
             <p className="text-sm text-muted-foreground">Try adjusting your filter criteria</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredAndSortedPicks.map((pick, index) => (
               <IntelligentStockCard
                 key={pick.symbol}

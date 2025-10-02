@@ -10,38 +10,48 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# US Top 20 Elite Stocks - Optimized for High-Quality AI Analysis
-# Focused on mega-cap companies with excellent data quality and liquidity
+# US Top 50 Elite Stocks - Professional Hedge Fund Universe
+# Curated selection of highest-quality S&P 100 companies with excellent data quality and liquidity
 US_TOP_100_STOCKS = [
-    # Technology Giants (7 stocks - 35% of universe)
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+    # Technology (15 stocks - 30% of universe)
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO',
+    'CRM', 'ORCL', 'CSCO', 'INTC', 'AMD', 'QCOM', 'ADBE',
 
-    # Financial Leaders (3 stocks - 15% of universe)
-    'V', 'JPM', 'MA',
+    # Healthcare (10 stocks - 20% of universe)
+    'UNH', 'JNJ', 'LLY', 'ABBV', 'PFE', 'MRK', 'TMO', 'DHR', 'BMY', 'AMGN',
 
-    # Healthcare Giants (4 stocks - 20% of universe)
-    'UNH', 'JNJ', 'LLY', 'ABBV',
+    # Financial (8 stocks - 16% of universe)
+    'V', 'JPM', 'MA', 'BAC', 'WFC', 'MS', 'GS', 'C',
 
-    # Consumer & Industrial Leaders (5 stocks - 25% of universe)
-    'WMT', 'PG', 'HD', 'KO', 'CVX',
+    # Consumer (8 stocks - 16% of universe)
+    'WMT', 'PG', 'HD', 'KO', 'COST', 'NKE', 'MCD', 'SBUX',
 
-    # Broadcom (Additional Tech for sector weight)
-    'AVGO'
+    # Energy (3 stocks - 6% of universe)
+    'CVX', 'XOM', 'COP',
+
+    # Industrial (4 stocks - 8% of universe)
+    'BA', 'CAT', 'HON', 'GE',
+
+    # Communication (2 stocks - 4% of universe)
+    'NFLX', 'DIS'
 ]
 
-# Sector classifications for Top 20 Elite Stocks
+# Sector classifications for Top 50 Elite Stocks
 SECTOR_MAPPING = {
-    'Technology': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO'],
+    'Technology': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO',
+                   'CRM', 'ORCL', 'CSCO', 'INTC', 'AMD', 'QCOM', 'ADBE'],
 
-    'Healthcare': ['UNH', 'JNJ', 'LLY', 'ABBV'],
+    'Healthcare': ['UNH', 'JNJ', 'LLY', 'ABBV', 'PFE', 'MRK', 'TMO', 'DHR', 'BMY', 'AMGN'],
 
-    'Financial': ['JPM', 'V', 'MA'],
+    'Financial': ['V', 'JPM', 'MA', 'BAC', 'WFC', 'MS', 'GS', 'C'],
 
-    'Consumer': ['WMT', 'HD', 'PG', 'KO'],
+    'Consumer': ['WMT', 'PG', 'HD', 'KO', 'COST', 'NKE', 'MCD', 'SBUX'],
 
-    'Energy': ['CVX'],
+    'Energy': ['CVX', 'XOM', 'COP'],
 
-    'Communication': ['NFLX']
+    'Industrial': ['BA', 'CAT', 'HON', 'GE'],
+
+    'Communication': ['NFLX', 'DIS']
 }
 
 # Market cap tiers
@@ -59,7 +69,7 @@ class USTop100StockManager:
         self.stocks = US_TOP_100_STOCKS
         self.sector_mapping = SECTOR_MAPPING
         self.market_cap_tiers = MARKET_CAP_TIERS
-        logger.info(f"Initialized US Top 100 Stock Manager with {len(self.stocks)} stocks")
+        logger.info(f"Initialized US Top 50 Elite Stock Manager with {len(self.stocks)} stocks across {len(self.sector_mapping)} sectors")
 
     def get_all_symbols(self) -> List[str]:
         """Get all stock symbols"""

@@ -75,7 +75,7 @@ logger = logging.getLogger(__name__)
 
 # In-memory cache for analyses with TTL
 analysis_cache = {}
-CACHE_TTL_SECONDS = 900  # 15 minutes
+CACHE_TTL_SECONDS = 1200  # 20 minutes (extended for 50-stock universe)
 
 # Thread pool for concurrent processing
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
@@ -762,13 +762,13 @@ async def analyze_portfolio(request: PortfolioRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/portfolio/top-picks", tags=["Portfolio Management"])
-async def get_top_picks(limit: int = 10):
-    """Get top investment picks based on 4-agent analysis"""
+async def get_top_picks(limit: int = 12):
+    """Get top investment picks based on 4-agent analysis from 50-stock universe"""
     try:
-        logger.info(f"Generating top {limit} investment picks")
+        logger.info(f"Generating top {limit} investment picks from 50-stock universe")
 
-        # Analyze all Top 20 Elite Stocks
-        top_symbols = US_TOP_100_STOCKS  # All 20 elite stocks for analysis
+        # Analyze all Top 50 Elite Stocks
+        top_symbols = US_TOP_100_STOCKS  # All 50 elite stocks for analysis
         batch_request = BatchAnalysisRequest(symbols=top_symbols)
         batch_result = await batch_analyze(batch_request)
 

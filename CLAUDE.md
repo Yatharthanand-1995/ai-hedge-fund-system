@@ -85,7 +85,7 @@ cd frontend && npm run lint
 
 1. **Data Collection** (`data/enhanced_provider.py`)
    - `EnhancedYahooProvider` fetches comprehensive market data
-   - Implements 15-minute caching (`CACHE_TTL_SECONDS = 900`)
+   - Implements 20-minute caching (`cache_duration = 1200`) for 50-stock universe
    - Calculates technical indicators using TA-Lib
    - Handles numpy array serialization issues with `sanitize_float()` and `sanitize_dict()`
 
@@ -170,7 +170,7 @@ Scores map to recommendations in `narrative_engine/narrative_engine.py`:
 
 The system operates on a curated universe defined in `data/us_top_100_stocks.py`:
 
-- `US_TOP_100_STOCKS`: List of 20 elite stocks (not actually 100)
+- `US_TOP_100_STOCKS`: List of 50 elite stocks from S&P 100 (balanced across 7 sectors)
 - `SECTOR_MAPPING`: Dictionary mapping stocks to sectors
 - Used by `/portfolio/top-picks` endpoint
 

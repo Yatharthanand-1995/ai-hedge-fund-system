@@ -93,7 +93,7 @@ ai_hedge_fund_system/
 ├── data/                     # Data Providers
 │   ├── enhanced_provider.py  # Enhanced Yahoo Finance provider
 │   ├── realtime_provider.py  # Real-time data feeds
-│   └── us_top_100_stocks.py  # US Top 100 stock universe
+│   └── us_top_100_stocks.py  # US Top 50 Elite Stocks universe
 ├── risk/                     # Risk Management
 │   ├── var_calculator.py     # Value at Risk calculation
 │   ├── correlation.py        # Correlation analysis

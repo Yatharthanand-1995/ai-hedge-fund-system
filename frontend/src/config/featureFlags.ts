@@ -54,6 +54,11 @@ export const defaultFeatureFlags: FeatureFlags = {
 
 // Load flags from localStorage (persists across sessions)
 const loadFeatureFlags = (): FeatureFlags => {
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return defaultFeatureFlags;
+  }
+
   try {
     const saved = localStorage.getItem('featureFlags');
     if (saved) {
@@ -67,6 +72,10 @@ const loadFeatureFlags = (): FeatureFlags => {
 
 // Save flags to localStorage
 export const saveFeatureFlags = (flags: FeatureFlags): void => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
+
   try {
     localStorage.setItem('featureFlags', JSON.stringify(flags));
   } catch (error) {
@@ -74,13 +83,30 @@ export const saveFeatureFlags = (flags: FeatureFlags): void => {
   }
 };
 
-// Export current feature flags
-export let FEATURE_FLAGS = loadFeatureFlags();
+// Internal cache for feature flags (lazy loaded)
+let _featureFlags: FeatureFlags | null = null;
+
+// Get feature flags (lazy loaded on first access)
+function getFeatureFlags(): FeatureFlags {
+  if (_featureFlags === null) {
+    _featureFlags = loadFeatureFlags();
+  }
+  return _featureFlags;
+}
+
+// Export current feature flags using Proxy for lazy loading
+export const FEATURE_FLAGS = new Proxy({} as FeatureFlags, {
+  get(_target, prop: string) {
+    const flags = getFeatureFlags();
+    return flags[prop as keyof FeatureFlags];
+  }
+});
 
 // Update feature flags (used by settings UI)
 export const updateFeatureFlags = (updates: Partial<FeatureFlags>): void => {
-  FEATURE_FLAGS = { ...FEATURE_FLAGS, ...updates };
-  saveFeatureFlags(FEATURE_FLAGS);
+  const currentFlags = getFeatureFlags();
+  _featureFlags = { ...currentFlags, ...updates };
+  saveFeatureFlags(_featureFlags);
 
   // Trigger page reload to apply changes
   if (typeof window !== 'undefined') {
@@ -90,8 +116,8 @@ export const updateFeatureFlags = (updates: Partial<FeatureFlags>): void => {
 
 // Reset to defaults
 export const resetFeatureFlags = (): void => {
-  FEATURE_FLAGS = { ...defaultFeatureFlags };
-  saveFeatureFlags(FEATURE_FLAGS);
+  _featureFlags = { ...defaultFeatureFlags };
+  saveFeatureFlags(_featureFlags);
 
   if (typeof window !== 'undefined') {
     window.location.reload();

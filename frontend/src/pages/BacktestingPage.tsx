@@ -132,7 +132,7 @@ export const BacktestingPage: React.FC = () => {
             📊 5-Year Historical Backtesting
           </h1>
           <p className="text-xl text-muted-foreground">
-            4-Agent Strategy Performance • $10,000 Initial Capital • Top 20 Stocks • Quarterly Rebalancing
+            4-Agent Strategy Performance • $10,000 Initial Capital • Top 50 Stocks • Quarterly Rebalancing
           </p>
         </div>
         <div className="flex space-x-2">
@@ -166,13 +166,13 @@ export const BacktestingPage: React.FC = () => {
             <h3 className="font-semibold text-blue-900 mb-1">About This Backtest</h3>
             <p className="text-sm text-blue-700">
               This backtest simulates the 4-agent investment strategy over the past 5 years using real historical market data.
-              The portfolio holds the top 20 stocks from our universe, rebalancing quarterly based on agent scores.
+              The portfolio holds the top 50 stocks from our universe, rebalancing quarterly based on agent scores.
               Results include transaction costs and compare against SPY benchmark.
             </p>
             <div className="mt-3 flex flex-wrap gap-4 text-sm text-blue-700">
               <div><strong>Period:</strong> 5 Years</div>
               <div><strong>Initial Capital:</strong> $10,000</div>
-              <div><strong>Portfolio Size:</strong> Top 20 Stocks</div>
+              <div><strong>Portfolio Size:</strong> Top 50 Stocks</div>
               <div><strong>Rebalance:</strong> Quarterly</div>
               <div><strong>Transaction Cost:</strong> 0.1%</div>
             </div>
