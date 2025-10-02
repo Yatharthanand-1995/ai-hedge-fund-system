@@ -148,10 +148,9 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
       );
     }
 
-    // Apply sector filter (would need sector data from backend)
+    // Apply sector filter
     if (filters.sector.length > 0) {
-      // For now, skip sector filtering until we have sector data
-      // result = result.filter(pick => filters.sector.includes(pick.sector));
+      result = result.filter(pick => filters.sector.includes(pick.sector));
     }
 
     // Apply score range filter
@@ -364,8 +363,8 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <div className="min-h-screen bg-background">
-          <div className="max-w-7xl mx-auto p-6">
+        <div className="min-h-screen bg-background flex justify-center">
+          <div className="w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6">
             <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
             {currentPage === 'dashboard' && (
               <ErrorBoundary>
