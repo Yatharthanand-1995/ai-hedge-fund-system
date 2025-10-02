@@ -23,13 +23,21 @@ def test_enhanced_error_handling():
 
         if response.status_code == 200:
             data = response.json()
-            confidence = data.get('confidence', 0)
-            score = data.get('composite_score', 0)
 
-            print(f"  ✅ AAPL analysis successful: Score={score:.1f}, Confidence={confidence:.2f}")
+            # Extract data from correct API response structure
+            narrative = data.get('narrative', {})
+            agent_results = data.get('agent_results', {})
+
+            # Calculate average confidence
+            confidences = [agent.get('confidence', 0) for agent in agent_results.values()]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+
+            score = narrative.get('overall_score', 0)
+
+            print(f"  ✅ AAPL analysis successful: Score={score:.1f}, Confidence={avg_confidence:.2f}")
 
             # Check if we have metrics indicating data quality
-            agent_scores = data.get('agent_scores', {})
+            agent_scores = narrative.get('agent_scores', {})
             fundamentals_score = agent_scores.get('fundamentals', 0)
 
             if fundamentals_score > 0:
@@ -58,13 +66,17 @@ def test_data_quality_validation():
 
             if response.status_code == 200:
                 data = response.json()
-                confidence = data.get('confidence', 0)
+
+                # Extract confidence from correct API structure
+                agent_results = data.get('agent_results', {})
+                confidences = [agent.get('confidence', 0) for agent in agent_results.values()]
+                avg_confidence = sum(confidences) / len(confidences) if confidences else 0
 
                 # Check if confidence is reasonable (not 0, not 1)
-                if 0.1 <= confidence <= 1.0:
-                    print(f"  ✅ {symbol}: Reasonable confidence={confidence:.2f}")
+                if 0.1 <= avg_confidence <= 1.0:
+                    print(f"  ✅ {symbol}: Reasonable confidence={avg_confidence:.2f}")
                 else:
-                    print(f"  ⚠️  {symbol}: Unusual confidence={confidence:.2f}")
+                    print(f"  ⚠️  {symbol}: Unusual confidence={avg_confidence:.2f}")
 
             else:
                 print(f"  ❌ Failed to analyze {symbol}")
@@ -84,7 +96,10 @@ def test_graceful_degradation():
 
         if response.status_code == 200:
             data = response.json()
-            agent_scores = data.get('agent_scores', {})
+
+            # Extract agent scores from correct API structure
+            narrative = data.get('narrative', {})
+            agent_scores = narrative.get('agent_scores', {})
 
             # Check all agents returned scores
             agents = ['fundamentals', 'momentum', 'quality', 'sentiment']
@@ -123,15 +138,31 @@ def test_portfolio_endpoint():
             if len(top_picks) > 0:
                 print(f"  ✅ Portfolio endpoint working: {len(top_picks)} top picks")
 
-                # Check first pick has required fields
+                # Check first pick has required fields (with correct field names)
                 first_pick = top_picks[0]
-                required_fields = ['symbol', 'composite_score', 'confidence', 'weight']
+                if 'symbol' in first_pick:
+                    print(f"  ✅ symbol: {first_pick['symbol']}")
+                else:
+                    print(f"  ❌ Missing field: symbol")
 
-                for field in required_fields:
-                    if field in first_pick:
-                        print(f"  ✅ {field}: {first_pick[field]}")
-                    else:
-                        print(f"  ❌ Missing field: {field}")
+                # Check for score field (might be overall_score or composite_score)
+                score = first_pick.get('overall_score', first_pick.get('composite_score', None))
+                if score is not None:
+                    print(f"  ✅ score: {score}")
+                else:
+                    print(f"  ❌ Missing field: score")
+
+                # Check for weight
+                if 'weight' in first_pick:
+                    print(f"  ✅ weight: {first_pick['weight']}")
+                else:
+                    print(f"  ❌ Missing field: weight")
+
+                # Check for recommendation
+                if 'recommendation' in first_pick:
+                    print(f"  ✅ recommendation: {first_pick['recommendation']}")
+                else:
+                    print(f"  ❌ Missing field: recommendation")
 
             else:
                 print(f"  ❌ No top picks returned")
@@ -158,9 +189,14 @@ def test_confidence_improvements():
 
             if response.status_code == 200:
                 data = response.json()
-                confidence = data.get('confidence', 0)
-                confidences.append(confidence)
-                print(f"  📊 {symbol}: confidence={confidence:.2f}")
+
+                # Extract confidence from correct API structure
+                agent_results = data.get('agent_results', {})
+                agent_confidences = [agent.get('confidence', 0) for agent in agent_results.values()]
+                avg_confidence = sum(agent_confidences) / len(agent_confidences) if agent_confidences else 0
+
+                confidences.append(avg_confidence)
+                print(f"  📊 {symbol}: confidence={avg_confidence:.2f}")
 
         if confidences:
             avg_confidence = sum(confidences) / len(confidences)

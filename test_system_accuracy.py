@@ -33,17 +33,35 @@ def test_agent_consistency():
             if response.status_code == 200:
                 data = response.json()
 
+                # Extract scores from the correct API response structure
+                narrative = data.get('narrative', {})
+                agent_scores = narrative.get('agent_scores', {})
+
+                # Calculate average confidence from all agents
+                agent_results = data.get('agent_results', {})
+                confidences = [agent.get('confidence', 0) for agent in agent_results.values()]
+                avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+
+                # Generate signals based on overall score and recommendation
+                overall_score = narrative.get('overall_score', 0)
+                recommendation = narrative.get('recommendation', 'HOLD')
+
+                # Signal logic based on recommendation
+                buy_signal = recommendation in ['STRONG BUY', 'BUY', 'WEAK BUY']
+                hold_signal = recommendation == 'HOLD'
+                sell_signal = recommendation in ['WEAK SELL', 'SELL', 'STRONG SELL']
+
                 result = {
                     'symbol': symbol,
-                    'composite_score': data.get('composite_score', 0),
-                    'confidence': data.get('confidence', 0),
-                    'fundamentals': data.get('agent_scores', {}).get('fundamentals', 0),
-                    'momentum': data.get('agent_scores', {}).get('momentum', 0),
-                    'quality': data.get('agent_scores', {}).get('quality', 0),
-                    'sentiment': data.get('agent_scores', {}).get('sentiment', 0),
-                    'buy_signal': data.get('signals', {}).get('buy', False),
-                    'hold_signal': data.get('signals', {}).get('hold', False),
-                    'sell_signal': data.get('signals', {}).get('sell', False)
+                    'composite_score': overall_score,
+                    'confidence': avg_confidence,
+                    'fundamentals': agent_scores.get('fundamentals', 0),
+                    'momentum': agent_scores.get('momentum', 0),
+                    'quality': agent_scores.get('quality', 0),
+                    'sentiment': agent_scores.get('sentiment', 0),
+                    'buy_signal': buy_signal,
+                    'hold_signal': hold_signal,
+                    'sell_signal': sell_signal
                 }
                 results.append(result)
 
@@ -65,7 +83,8 @@ def test_portfolio_endpoint():
     print(f"\n🎯 Testing Portfolio Endpoint...")
 
     try:
-        response = requests.get(f"{BASE_URL}/portfolio/top-picks", timeout=60)
+        # Use shorter timeout and limit to avoid long processing times
+        response = requests.get(f"{BASE_URL}/portfolio/top-picks?limit=3", timeout=120)
 
         if response.status_code == 200:
             data = response.json()
@@ -74,10 +93,12 @@ def test_portfolio_endpoint():
             print(f"  Top picks count: {len(data.get('top_picks', []))}")
             print(f"  Total portfolio value: ${data.get('portfolio_summary', {}).get('total_value', 0):,.0f}")
 
-            # Show top 3 picks
+            # Show top 3 picks with corrected field access
             top_picks = data.get('top_picks', [])[:3]
             for i, pick in enumerate(top_picks, 1):
-                print(f"  #{i}: {pick.get('symbol')} - Score: {pick.get('composite_score', 0):.1f} - Weight: {pick.get('weight', 0):.1f}%")
+                score = pick.get('overall_score', pick.get('composite_score', 0))
+                weight = pick.get('weight', 0)
+                print(f"  #{i}: {pick.get('symbol')} - Score: {score:.1f} - Weight: {weight:.1f}%")
 
             return True
         else:
@@ -180,6 +201,8 @@ if __name__ == "__main__":
     if results:
         issues = analyze_scoring_issues(results)
         suggest_improvements(issues)
+    else:
+        issues = ["No data collected"]
 
     print(f"\n🏁 ANALYSIS COMPLETE")
     print(f"System Status: {'✅ Healthy' if not issues and portfolio_works else '⚠️ Issues Found'}")

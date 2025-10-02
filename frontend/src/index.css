@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 23% 8%;
+    --foreground: 210 40% 98%;
+    --card: 220 23% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 23% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 50%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 14% 16%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 210 40% 50%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 13% 16%;
+    --input: 220 13% 16%;
+    --ring: 210 40% 50%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    border-color: rgb(75 85 99);
+  }
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', system-ui, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .market-up {
+    @apply text-green-400;
+  }
+
+  .market-down {
+    @apply text-red-400;
+  }
+
+  .market-neutral {
+    @apply text-gray-400;
+  }
+
+  .score-excellent {
+    @apply text-green-400 bg-green-400/10 border-green-400/20;
+  }
+
+  .score-good {
+    @apply text-emerald-400 bg-emerald-400/10 border-emerald-400/20;
+  }
+
+  .score-neutral {
+    @apply text-yellow-400 bg-yellow-400/10 border-yellow-400/20;
+  }
+
+  .score-poor {
+    @apply text-orange-400 bg-orange-400/10 border-orange-400/20;
+  }
+
+  .score-bad {
+    @apply text-red-400 bg-red-400/10 border-red-400/20;
+  }
+
+  .recommendation-strong-buy {
+    @apply text-green-400 bg-green-400/10 border-green-400/30;
+  }
+
+  .recommendation-buy {
+    @apply text-emerald-400 bg-emerald-400/10 border-emerald-400/30;
+  }
+
+  .recommendation-weak-buy {
+    @apply text-lime-400 bg-lime-400/10 border-lime-400/30;
+  }
+
+  .recommendation-hold {
+    @apply text-yellow-400 bg-yellow-400/10 border-yellow-400/30;
+  }
+
+  .recommendation-weak-sell {
+    @apply text-orange-400 bg-orange-400/10 border-orange-400/30;
+  }
+
+  .recommendation-sell {
+    @apply text-red-400 bg-red-400/10 border-red-400/30;
+  }
+
+  .professional-card {
+    background: hsl(var(--card));
+    border: 1px solid rgb(75 85 99);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  .professional-button {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background;
+  }
+
+  .professional-button-primary {
+    @apply professional-button bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4;
+  }
+
+  .professional-button-secondary {
+    @apply professional-button bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 py-2 px-4;
+  }
+
+  .professional-input {
+    @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .section-header {
+    @apply text-lg font-semibold text-foreground mb-4;
+  }
+
+  .metric-label {
+    @apply text-sm font-medium text-muted-foreground;
+  }
+
+  .metric-value {
+    @apply text-lg font-semibold text-foreground;
+  }
+
+  .agent-score-ring {
+    @apply relative inline-flex items-center justify-center;
+  }
+}
