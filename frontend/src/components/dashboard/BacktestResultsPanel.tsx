@@ -372,6 +372,30 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     return 'text-red-400';
   };
 
+  const handleExportResults = () => {
+    if (!selectedResult) return;
+
+    const dataStr = JSON.stringify(selectedResult, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `backtest-results-${selectedResult.start_date}-${selectedResult.end_date}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    console.log('Exported backtest results:', selectedResult);
+  };
+
+  const handleCompareStrategies = () => {
+    console.log('Compare Strategies clicked');
+    alert('Compare Strategies\n\nIn a real app, this would:\n• Show side-by-side strategy comparison\n• Compare different rebalancing frequencies\n• Analyze different portfolio sizes\n• Compare vs benchmarks (S&P 500, etc.)');
+  };
+
+  const handleViewFullReport = () => {
+    console.log('View Full Report clicked');
+    alert('View Full Report\n\nIn a real app, this would:\n• Open detailed PDF/HTML report\n• Show all metrics and analysis\n• Include trade-by-trade breakdown\n• Provide risk analysis charts');
+  };
+
   if (loading) {
     return (
       <div className={cn('professional-card p-6', className)}>
@@ -577,14 +601,23 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
 
           {/* Action Buttons */}
           <div className="flex space-x-2">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2">
+            <button
+              onClick={handleExportResults}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2"
+            >
               <Download className="h-4 w-4" />
               <span>Export Results</span>
             </button>
-            <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+            <button
+              onClick={handleCompareStrategies}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            >
               Compare Strategies
             </button>
-            <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+            <button
+              onClick={handleViewFullReport}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            >
               View Full Report
             </button>
           </div>

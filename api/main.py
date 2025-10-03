@@ -901,6 +901,350 @@ async def get_portfolio_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# User Portfolio Models
+class PortfolioPosition(BaseModel):
+    symbol: str
+    shares: float
+    cost_basis: float
+    purchase_date: str
+    notes: Optional[str] = None
+
+class UserPortfolio(BaseModel):
+    portfolio_id: str
+    cash: float
+    positions: List[PortfolioPosition]
+    settings: Optional[Dict] = None
+
+class UpdatePositionRequest(BaseModel):
+    symbol: str
+    shares: float
+    cost_basis: float
+    purchase_date: str
+    notes: Optional[str] = None
+
+
+# User Portfolio Endpoints
+PORTFOLIO_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'user_portfolio.json')
+
+def load_user_portfolio():
+    """Load user portfolio from JSON file"""
+    try:
+        with open(PORTFOLIO_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        # Return default empty portfolio
+        return {
+            "portfolio_id": "user_main_portfolio",
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "cash": 0.0,
+            "positions": [],
+            "settings": {
+                "risk_tolerance": "moderate",
+                "investment_style": "growth",
+                "rebalance_frequency": "monthly"
+            }
+        }
+
+def save_user_portfolio(portfolio_data):
+    """Save user portfolio to JSON file"""
+    portfolio_data['updated_at'] = datetime.now().isoformat()
+    with open(PORTFOLIO_FILE, 'w') as f:
+        json.dump(portfolio_data, f, indent=2)
+
+
+@app.get("/portfolio/user", tags=["User Portfolio"])
+async def get_user_portfolio():
+    """Get user's actual portfolio with current market values and P&L"""
+    try:
+        logger.info("Fetching user portfolio")
+        portfolio = load_user_portfolio()
+
+        # Fetch current prices and calculate P&L for each position
+        enriched_positions = []
+        total_market_value = 0
+        total_cost_basis = 0
+        total_pnl = 0
+
+        for position in portfolio['positions']:
+            try:
+                ticker = yf.Ticker(position['symbol'])
+                info = ticker.info
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+
+                # Calculate position metrics
+                market_value = current_price * position['shares']
+                position_cost = position['cost_basis'] * position['shares']
+                pnl = market_value - position_cost
+                pnl_percent = (pnl / position_cost * 100) if position_cost > 0 else 0
+
+                enriched_position = {
+                    **position,
+                    'current_price': round(current_price, 2),
+                    'market_value': round(market_value, 2),
+                    'total_cost': round(position_cost, 2),
+                    'pnl': round(pnl, 2),
+                    'pnl_percent': round(pnl_percent, 2),
+                    'company_name': info.get('longName', position['symbol'])
+                }
+
+                enriched_positions.append(enriched_position)
+                total_market_value += market_value
+                total_cost_basis += position_cost
+                total_pnl += pnl
+
+            except Exception as e:
+                logger.error(f"Error fetching data for {position['symbol']}: {e}")
+                # Add position with unknown price
+                enriched_position = {
+                    **position,
+                    'current_price': 0,
+                    'market_value': 0,
+                    'total_cost': position['cost_basis'] * position['shares'],
+                    'pnl': 0,
+                    'pnl_percent': 0,
+                    'company_name': position['symbol'],
+                    'error': str(e)
+                }
+                enriched_positions.append(enriched_position)
+
+        # Calculate portfolio summary
+        total_value = total_market_value + portfolio['cash']
+        total_invested = total_cost_basis + portfolio['cash']
+        overall_pnl_percent = (total_pnl / total_cost_basis * 100) if total_cost_basis > 0 else 0
+
+        response = {
+            'portfolio_id': portfolio['portfolio_id'],
+            'cash': portfolio['cash'],
+            'positions': enriched_positions,
+            'summary': {
+                'total_value': round(total_value, 2),
+                'total_market_value': round(total_market_value, 2),
+                'total_cost_basis': round(total_cost_basis, 2),
+                'total_pnl': round(total_pnl, 2),
+                'total_pnl_percent': round(overall_pnl_percent, 2),
+                'cash': portfolio['cash'],
+                'num_positions': len(enriched_positions),
+                'total_invested': round(total_invested, 2)
+            },
+            'settings': portfolio.get('settings', {}),
+            'updated_at': portfolio.get('updated_at', datetime.now().isoformat())
+        }
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Failed to fetch user portfolio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/user/position", tags=["User Portfolio"])
+async def add_or_update_position(position: UpdatePositionRequest):
+    """Add a new position or update existing position in user portfolio"""
+    try:
+        logger.info(f"Adding/updating position: {position.symbol}")
+        portfolio = load_user_portfolio()
+
+        # Check if position already exists
+        existing_position_index = None
+        for i, pos in enumerate(portfolio['positions']):
+            if pos['symbol'].upper() == position.symbol.upper():
+                existing_position_index = i
+                break
+
+        new_position = {
+            'symbol': position.symbol.upper(),
+            'shares': position.shares,
+            'cost_basis': position.cost_basis,
+            'purchase_date': position.purchase_date,
+            'notes': position.notes or ""
+        }
+
+        if existing_position_index is not None:
+            # Update existing position
+            portfolio['positions'][existing_position_index] = new_position
+            message = f"Position {position.symbol} updated"
+        else:
+            # Add new position
+            portfolio['positions'].append(new_position)
+            message = f"Position {position.symbol} added"
+
+        save_user_portfolio(portfolio)
+
+        return {
+            'success': True,
+            'message': message,
+            'portfolio': portfolio
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to add/update position: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/portfolio/user/position/{symbol}", tags=["User Portfolio"])
+async def remove_position(symbol: str):
+    """Remove a position from user portfolio"""
+    try:
+        logger.info(f"Removing position: {symbol}")
+        portfolio = load_user_portfolio()
+
+        # Find and remove position
+        original_length = len(portfolio['positions'])
+        portfolio['positions'] = [pos for pos in portfolio['positions'] if pos['symbol'].upper() != symbol.upper()]
+
+        if len(portfolio['positions']) == original_length:
+            raise HTTPException(status_code=404, detail=f"Position {symbol} not found")
+
+        save_user_portfolio(portfolio)
+
+        return {
+            'success': True,
+            'message': f"Position {symbol} removed",
+            'portfolio': portfolio
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remove position: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/portfolio/user/cash", tags=["User Portfolio"])
+async def update_cash(cash: float):
+    """Update available cash in user portfolio"""
+    try:
+        logger.info(f"Updating cash to: ${cash}")
+        portfolio = load_user_portfolio()
+        portfolio['cash'] = cash
+        save_user_portfolio(portfolio)
+
+        return {
+            'success': True,
+            'message': f"Cash updated to ${cash}",
+            'cash': cash
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to update cash: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/user/recommendations", tags=["User Portfolio"])
+async def get_portfolio_recommendations():
+    """Get AI-powered recommendations for user's portfolio"""
+    try:
+        logger.info("Generating portfolio recommendations")
+
+        # Get user's current portfolio
+        user_portfolio = load_user_portfolio()
+        user_positions = {pos['symbol']: pos for pos in user_portfolio['positions']}
+
+        # Get AI top picks (limit to top 10)
+        top_picks_response = await get_top_picks(limit=10)
+        top_picks = top_picks_response["top_picks"]
+
+        if not top_picks:
+            raise HTTPException(status_code=404, detail="No top picks available")
+
+        # Analyze each user position
+        position_analysis = []
+        for symbol, position in user_positions.items():
+            # Find if this stock is in AI top picks
+            ai_pick = next((pick for pick in top_picks if pick['symbol'] == symbol), None)
+
+            if ai_pick:
+                # User owns a recommended stock
+                analysis = {
+                    'symbol': symbol,
+                    'action': 'HOLD' if ai_pick['overall_score'] >= 65 else 'CONSIDER_SELLING',
+                    'ai_score': ai_pick['overall_score'],
+                    'current_value': position['shares'] * (ai_pick.get('market_data', {}).get('current_price', 0) if ai_pick.get('market_data') else 0),
+                    'recommendation': ai_pick.get('recommendation', 'HOLD'),
+                    'confidence': ai_pick.get('confidence_level', 'MEDIUM'),
+                    'reasoning': f"AI Score: {ai_pick['overall_score']}/100. " +
+                                (f"Strong performer - Continue holding" if ai_pick['overall_score'] >= 65
+                                 else f"Below target score - Consider rebalancing"),
+                    'rank_in_top_picks': next((i+1 for i, p in enumerate(top_picks) if p['symbol'] == symbol), None)
+                }
+            else:
+                # User owns a stock not in top picks
+                analysis = {
+                    'symbol': symbol,
+                    'action': 'REVIEW',
+                    'ai_score': None,
+                    'current_value': 0,
+                    'recommendation': 'NOT_IN_TOP_PICKS',
+                    'confidence': 'LOW',
+                    'reasoning': "This stock is not in AI's current top picks. Consider evaluating for potential rebalancing.",
+                    'rank_in_top_picks': None
+                }
+
+            position_analysis.append(analysis)
+
+        # Generate buy recommendations from top picks user doesn't own
+        buy_recommendations = []
+        for i, pick in enumerate(top_picks[:5]):  # Top 5 recommendations
+            if pick['symbol'] not in user_positions:
+                ticker = yf.Ticker(pick['symbol'])
+                info = ticker.info
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+
+                # Calculate how many shares can be bought with available cash
+                shares_can_buy = int(user_portfolio['cash'] / current_price) if current_price > 0 else 0
+                investment_amount = shares_can_buy * current_price if shares_can_buy > 0 else current_price
+
+                buy_recommendations.append({
+                    'symbol': pick['symbol'],
+                    'rank': i + 1,
+                    'ai_score': pick['overall_score'],
+                    'current_price': round(current_price, 2),
+                    'recommendation': pick.get('recommendation', 'BUY'),
+                    'confidence': pick.get('confidence_level', 'MEDIUM'),
+                    'shares_to_buy': shares_can_buy if shares_can_buy > 0 else 1,
+                    'estimated_investment': round(investment_amount, 2),
+                    'reasoning': pick.get('top_reason', f"Top {i+1} AI pick with score {pick['overall_score']}/100"),
+                    'sector': pick.get('sector', 'Unknown')
+                })
+
+        # Calculate portfolio health score
+        total_value = user_portfolio['cash']
+        for pos in user_portfolio['positions']:
+            ticker = yf.Ticker(pos['symbol'])
+            info = ticker.info
+            current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+            total_value += pos['shares'] * current_price
+
+        # Count actions needed
+        actions_needed = len([a for a in position_analysis if a['action'] in ['CONSIDER_SELLING', 'REVIEW']])
+
+        response = {
+            'portfolio_analysis': {
+                'total_positions': len(user_portfolio['positions']),
+                'positions_in_top_picks': len([a for a in position_analysis if a['rank_in_top_picks'] is not None]),
+                'actions_needed': actions_needed,
+                'cash_available': user_portfolio['cash'],
+                'total_portfolio_value': round(total_value, 2)
+            },
+            'current_holdings_analysis': position_analysis,
+            'buy_recommendations': buy_recommendations[:3],  # Top 3 buy suggestions
+            'rebalancing_plan': {
+                'priority': 'HIGH' if actions_needed > 0 else 'LOW',
+                'suggested_actions': actions_needed,
+                'available_capital': user_portfolio['cash'],
+                'diversification_score': len(set([p.get('sector') for p in user_portfolio['positions']])) / 7 * 100  # Out of 7 sectors
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Failed to generate recommendations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Backtesting Models
 class BacktestConfig(BaseModel):
     start_date: str = Field(..., description="Start date in YYYY-MM-DD format")

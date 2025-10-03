@@ -223,6 +223,49 @@ export const ActionableInsightsPanel: React.FC<ActionableInsightsPanelProps> = (
     fetchInsights();
   }, []);
 
+  const handleExecuteAction = (action: ActionItem) => {
+    console.log(`Executing action: ${action.action} for ${action.symbol || 'portfolio'}`, action);
+    alert(`Action "${action.action}" logged!\n\nIn a real app, this would:\n• Execute the ${action.action} action\n• Update portfolio positions\n• Send trade orders to broker`);
+  };
+
+  const handleViewActionDetails = (action: ActionItem) => {
+    console.log('Viewing action details:', action);
+    const details = `
+📋 Action Details
+
+Title: ${action.title}
+Type: ${action.type}
+Priority: ${action.priority}
+Symbol: ${action.symbol || 'N/A'}
+Action: ${action.action}
+Timeframe: ${action.timeframe}
+Impact: ${action.impact}
+
+Description: ${action.description}
+
+Current Value: ${action.currentValue ? (typeof action.currentValue === 'number' && action.currentValue > 50 ? `$${action.currentValue.toFixed(2)}` : `${action.currentValue.toFixed(1)}%`) : 'N/A'}
+Target Value: ${action.targetValue ? (typeof action.targetValue === 'number' && action.targetValue > 50 ? `$${action.targetValue.toFixed(2)}` : `${action.targetValue.toFixed(1)}%`) : 'N/A'}
+    `.trim();
+    alert(details);
+  };
+
+  const handleSetReminder = (event: UpcomingEvent) => {
+    console.log('Setting reminder for event:', event);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      alert(`Reminder set for "${event.title}" on ${event.date.toLocaleDateString()}!\n\nIn a real app, this would:\n• Create a calendar reminder\n• Send notification before the event\n• Add to your alerts dashboard`);
+    } else if ('Notification' in window && Notification.permission !== 'denied') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          alert(`Notifications enabled! Reminder set for "${event.title}" on ${event.date.toLocaleDateString()}`);
+        } else {
+          alert(`Reminder set for "${event.title}" on ${event.date.toLocaleDateString()} (notifications disabled)`);
+        }
+      });
+    } else {
+      alert(`Reminder set for "${event.title}" on ${event.date.toLocaleDateString()}!\n\nNote: Browser notifications are not supported or denied.`);
+    }
+  };
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'text-red-400 bg-red-500/10';
@@ -387,10 +430,16 @@ export const ActionableInsightsPanel: React.FC<ActionableInsightsPanelProps> = (
                     Created {formatTimeAgo(action.createdAt)} • Impact: {action.impact}
                   </div>
                   <div className="flex space-x-2">
-                    <button className="px-3 py-1 bg-accent hover:bg-accent/80 text-accent-foreground rounded text-sm">
+                    <button
+                      onClick={() => handleExecuteAction(action)}
+                      className="px-3 py-1 bg-accent hover:bg-accent/80 text-accent-foreground rounded text-sm"
+                    >
                       {action.action}
                     </button>
-                    <button className="px-3 py-1 border border-border hover:bg-muted/20 rounded text-sm">
+                    <button
+                      onClick={() => handleViewActionDetails(action)}
+                      className="px-3 py-1 border border-border hover:bg-muted/20 rounded text-sm"
+                    >
                       Details
                     </button>
                   </div>
@@ -439,7 +488,10 @@ export const ActionableInsightsPanel: React.FC<ActionableInsightsPanelProps> = (
                       <span className="font-medium">{event.symbol}</span>
                     )}
                   </div>
-                  <button className="text-sm text-accent hover:underline flex items-center space-x-1">
+                  <button
+                    onClick={() => handleSetReminder(event)}
+                    className="text-sm text-accent hover:underline flex items-center space-x-1"
+                  >
                     <span>Set Reminder</span>
                     <ArrowRight className="h-3 w-3" />
                   </button>

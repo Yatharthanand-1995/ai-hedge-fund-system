@@ -288,6 +288,41 @@ export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ classN
     return 'text-green-400';
   };
 
+  const handleGenerateRiskReport = () => {
+    console.log('Generate Risk Report clicked');
+
+    // Prepare report data
+    const reportData = {
+      generated_at: new Date().toISOString(),
+      risk_metrics: riskMetrics,
+      position_risks: positionRisks,
+      stress_scenarios: scenarios,
+      var_history: varHistory
+    };
+
+    // Export as JSON file
+    const dataStr = JSON.stringify(reportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `risk-report-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    console.log('Risk report exported successfully');
+  };
+
+  const handleAdjustPositions = () => {
+    console.log('Adjust Positions clicked');
+    alert('Adjust Portfolio Positions\n\nIn a real app, this would:\n• Show position adjustment interface\n• Calculate optimal rebalancing\n• Reduce high-risk positions\n• Increase positions in safer assets\n• Execute trades to optimize risk/return');
+  };
+
+  const handleSetAlerts = () => {
+    console.log('Set Alerts clicked');
+    alert('Set Risk Alerts\n\nIn a real app, this would:\n• Configure custom risk thresholds\n• Set up email/SMS notifications\n• Define trigger conditions (VaR limits, drawdown alerts)\n• Enable real-time monitoring\n• Create alert rules for specific positions');
+  };
+
   if (loading) {
     return (
       <div className={cn('professional-card p-6', className)}>
@@ -505,13 +540,22 @@ export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ classN
         </div>
 
         <div className="mt-4 flex space-x-2">
-          <button className="bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+          <button
+            onClick={handleGenerateRiskReport}
+            className="bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+          >
             Generate Risk Report
           </button>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+          <button
+            onClick={handleAdjustPositions}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+          >
             Adjust Positions
           </button>
-          <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+          <button
+            onClick={handleSetAlerts}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+          >
             Set Alerts
           </button>
         </div>

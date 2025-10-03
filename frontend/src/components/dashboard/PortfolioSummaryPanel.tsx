@@ -119,6 +119,26 @@ export const PortfolioSummaryPanel: React.FC<PortfolioSummaryPanelProps> = ({ cl
     fetchMetrics();
   }, []);
 
+  const handleViewDetails = () => {
+    console.log('View Details clicked');
+    alert('View Portfolio Details\n\nIn a real app, this would:\n• Navigate to detailed portfolio page\n• Show position-by-position breakdown\n• Display historical performance charts\n• Show full allocation analysis');
+  };
+
+  const handleRebalance = () => {
+    console.log('Rebalance clicked');
+    alert('Portfolio Rebalancing\n\nIn a real app, this would:\n• Calculate optimal rebalancing trades\n• Show buy/sell recommendations\n• Estimate transaction costs\n• Execute rebalancing orders');
+  };
+
+  const handleRiskReport = () => {
+    console.log('Risk Report clicked');
+    alert('Generate Risk Report\n\nIn a real app, this would:\n• Generate comprehensive risk analysis\n• Show VaR and stress test results\n• Display correlation matrices\n• Download PDF report');
+  };
+
+  const handleViewActions = (count: number) => {
+    console.log(`View Actions clicked - ${count} pending actions`);
+    alert(`View Pending Actions (${count})\n\nIn a real app, this would:\n• Navigate to actions dashboard\n• Show all pending tasks\n• Prioritize by urgency\n• Allow execution of actions`);
+  };
+
   if (loading) {
     return (
       <div className={cn('professional-card p-6', className)}>
@@ -286,17 +306,29 @@ export const PortfolioSummaryPanel: React.FC<PortfolioSummaryPanelProps> = ({ cl
 
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
-        <button className="flex-1 min-w-32 bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+        <button
+          onClick={handleViewDetails}
+          className="flex-1 min-w-32 bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+        >
           View Details
         </button>
-        <button className="flex-1 min-w-32 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+        <button
+          onClick={handleRebalance}
+          className="flex-1 min-w-32 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+        >
           Rebalance
         </button>
-        <button className="flex-1 min-w-32 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+        <button
+          onClick={handleRiskReport}
+          className="flex-1 min-w-32 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+        >
           Risk Report
         </button>
         {metrics.actionsRequired > 0 && (
-          <button className="flex-1 min-w-32 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+          <button
+            onClick={() => handleViewActions(metrics.actionsRequired)}
+            className="flex-1 min-w-32 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+          >
             View Actions ({metrics.actionsRequired})
           </button>
         )}

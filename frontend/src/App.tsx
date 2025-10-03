@@ -6,7 +6,6 @@ import { Navigation } from './components/navigation/Navigation';
 import { StockAnalysisPage } from './pages/StockAnalysisPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { BacktestingPage } from './pages/BacktestingPage';
-import { PortfolioSummaryPanel } from './components/dashboard/PortfolioSummaryPanel';
 import { IntelligentStockCard } from './components/dashboard/IntelligentStockCard';
 import { SectorAllocationPanel } from './components/dashboard/SectorAllocationPanel';
 import { MultiAgentConsensusPanel } from './components/dashboard/MultiAgentConsensusPanel';
@@ -16,6 +15,7 @@ import { BacktestResultsPanel } from './components/dashboard/BacktestResultsPane
 import { InvestmentGuidePanel } from './components/dashboard/InvestmentGuidePanel';
 import { CommandCenter } from './components/dashboard/CommandCenter';
 import { SmartFilterBar } from './components/dashboard/SmartFilterBar';
+import { UserPortfolioPanel } from './components/dashboard/UserPortfolioPanel';
 import type { FilterOptions, SortOption } from './types/filters';
 import { FEATURE_FLAGS } from './config/featureFlags';
 
@@ -135,6 +135,12 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
     // In a real app, this would trigger actual trading actions
   };
 
+  const handleDetailsClick = (symbol: string) => {
+    console.log(`Details clicked for ${symbol}, navigating to analysis page`);
+    onPageChange('analysis');
+    // In a real app, we would also pre-populate the stock symbol in the analysis form
+  };
+
   // Filter and sort picks
   const filteredAndSortedPicks = React.useMemo(() => {
     let result = [...topPicks];
@@ -230,8 +236,8 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
       {/* Investment Guide - How to Use */}
       <InvestmentGuidePanel className="mb-8" />
 
-      {/* Executive Summary - Top Priority */}
-      <PortfolioSummaryPanel className="mb-8" />
+      {/* Your Real Portfolio with AI Recommendations */}
+      <UserPortfolioPanel className="mb-8" />
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -294,6 +300,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
                 stock={pick}
                 rank={index + 1}
                 onActionClick={handleActionClick}
+                onDetailsClick={handleDetailsClick}
               />
             ))}
           </div>

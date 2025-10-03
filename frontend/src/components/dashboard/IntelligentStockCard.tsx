@@ -59,13 +59,15 @@ interface IntelligentStockCardProps {
   rank: number;
   className?: string;
   onActionClick?: (action: ActionItem, symbol: string) => void;
+  onDetailsClick?: (symbol: string) => void;
 }
 
 export const IntelligentStockCard: React.FC<IntelligentStockCardProps> = ({
   stock,
   rank,
   className,
-  onActionClick
+  onActionClick,
+  onDetailsClick
 }) => {
   const getRecommendationColor = (recommendation: string) => {
     switch (recommendation.toUpperCase()) {
@@ -288,7 +290,10 @@ export const IntelligentStockCard: React.FC<IntelligentStockCardProps> = ({
         >
           {stock.nextAction.type.toUpperCase()}
         </button>
-        <button className="px-3 py-2 border border-border rounded-lg text-sm text-muted-foreground hover:bg-muted/20 transition-colors">
+        <button
+          onClick={() => onDetailsClick?.(stock.symbol)}
+          className="px-3 py-2 border border-border rounded-lg text-sm text-muted-foreground hover:bg-muted/20 transition-colors"
+        >
           Details
         </button>
       </div>

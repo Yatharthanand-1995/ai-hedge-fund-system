@@ -95,6 +95,29 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
     return 'text-red-400';
   };
 
+  const handleViewFullAnalysis = () => {
+    console.log('View Full Analysis clicked for', selectedStock);
+    alert(`View Full Analysis - ${selectedStock}\n\nIn a real app, this would:\n• Navigate to detailed stock analysis page\n• Show comprehensive agent breakdowns\n• Display historical scoring trends\n• Include full investment thesis`);
+  };
+
+  const handleCompareStocks = () => {
+    console.log('Compare Stocks clicked');
+    alert('Compare Stocks\n\nIn a real app, this would:\n• Show side-by-side stock comparison\n• Compare all agent scores\n• Highlight key differences\n• Recommend best pick');
+  };
+
+  const handleExportReport = () => {
+    if (!selectedData) return;
+    const dataStr = JSON.stringify(selectedData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `consensus-analysis-${selectedStock}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    console.log('Exported consensus report for', selectedStock);
+  };
+
   if (loading) {
     return (
       <div className={cn('professional-card p-6', className)}>
@@ -295,13 +318,22 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
 
           {/* Action Recommendations */}
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button className="flex-1 bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+            <button
+              onClick={handleViewFullAnalysis}
+              className="flex-1 bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            >
               View Full Analysis
             </button>
-            <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+            <button
+              onClick={handleCompareStocks}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            >
               Compare Stocks
             </button>
-            <button className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+            <button
+              onClick={handleExportReport}
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            >
               Export Report
             </button>
           </div>
