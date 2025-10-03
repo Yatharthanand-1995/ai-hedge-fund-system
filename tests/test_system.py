@@ -5,7 +5,8 @@ Test script for the 4-agent hedge fund system
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(__file__))
+# Add parent directory to path so tests can import project modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def test_agents():
     """Test all 4 agents with AAPL"""

@@ -3,6 +3,11 @@
 Test script to demonstrate Top 20 universe performance vs Full universe
 """
 
+import sys
+import os
+# Add parent directory to path so tests can import project modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 import time
 import asyncio
 from data.us_top_100_stocks import US_TOP_100_STOCKS
