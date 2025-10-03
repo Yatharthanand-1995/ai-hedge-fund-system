@@ -54,7 +54,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     end_date: '2024-01-01',
     rebalance_frequency: 'monthly',
     top_n: 10,
-    universe: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'V', 'JPM', 'UNH']
+    universe: []  // Empty array uses all 50 stocks from US_TOP_100_STOCKS by default
   });
 
   useEffect(() => {
