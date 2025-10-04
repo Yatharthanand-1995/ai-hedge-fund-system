@@ -901,6 +901,79 @@ async def get_portfolio_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/portfolio/sector-analysis", tags=["Portfolio Management"])
+async def get_sector_analysis():
+    """Get comprehensive sector analysis across all 50 stocks in the universe"""
+    try:
+        logger.info("Generating sector analysis for 50-stock universe")
+
+        # Analyze all 50 stocks
+        all_symbols = US_TOP_100_STOCKS
+        batch_request = BatchAnalysisRequest(symbols=all_symbols)
+        batch_result = await batch_analyze(batch_request)
+
+        analyses = batch_result["analyses"]
+
+        # Group by sector
+        sector_data = {}
+        for sector_name, symbols in SECTOR_MAPPING.items():
+            sector_analyses = [a for a in analyses if a["symbol"] in symbols]
+
+            if not sector_analyses:
+                continue
+
+            # Calculate sector metrics
+            scores = [a["narrative"]["overall_score"] for a in sector_analyses]
+            avg_score = sum(scores) / len(scores) if scores else 0
+            score_std = np.std(scores) if len(scores) > 1 else 0
+
+            # Calculate allocation (equal weight)
+            allocation = (len(sector_analyses) / len(all_symbols)) * 100
+
+            # Determine momentum based on average score
+            if avg_score > 70:
+                momentum = "bullish"
+            elif avg_score < 45:
+                momentum = "bearish"
+            else:
+                momentum = "neutral"
+
+            # Determine risk level based on score dispersion
+            if score_std > 15:
+                risk_level = "high"
+            elif score_std > 8:
+                risk_level = "medium"
+            else:
+                risk_level = "low"
+
+            # Estimate performance based on scores
+            performance = (avg_score - 50) * 0.3  # Simple performance estimate
+
+            # Target allocation (from sector weighting in US_TOP_100_STOCKS)
+            target = allocation  # For now, use current as target
+
+            sector_data[sector_name] = {
+                "name": sector_name,
+                "allocation": round(allocation, 1),
+                "target": round(target, 1),
+                "stocks": len(sector_analyses),
+                "avgScore": round(avg_score, 1),
+                "performance": round(performance, 1),
+                "momentum": momentum,
+                "riskLevel": risk_level
+            }
+
+        return {
+            "sectors": list(sector_data.values()),
+            "total_stocks": len(analyses),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate sector analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # User Portfolio Models
 class PortfolioPosition(BaseModel):
     symbol: str
@@ -1582,7 +1655,7 @@ async def run_historical_backtest(config: BacktestConfig):
             initial_capital=config.initial_capital,
             rebalance_frequency=config.rebalance_frequency,
             top_n_stocks=config.top_n,
-            universe=config.universe if config.universe else US_TOP_100_STOCKS[:20],
+            universe=config.universe if config.universe else US_TOP_100_STOCKS,  # Use all 50 stocks
             transaction_cost=0.001
         )
 

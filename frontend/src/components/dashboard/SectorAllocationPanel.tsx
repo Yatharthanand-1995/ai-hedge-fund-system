@@ -18,16 +18,15 @@ interface SectorAllocationPanelProps {
   className?: string;
 }
 
-// Color mapping for sectors
+// Color mapping for all 7 sectors
 const SECTOR_COLORS = {
   'Technology': '#0088FE',
   'Healthcare': '#00C49F',
   'Financial': '#FFBB28',
   'Consumer': '#FF8042',
   'Energy': '#8884d8',
-  'Communication': '#82ca9d',
-  'Industrial': '#ffc658',
-  'Utilities': '#ff7c7c'
+  'Industrial': '#a855f7',  // Purple for Industrial
+  'Communication': '#82ca9d'
 };
 
 export const SectorAllocationPanel: React.FC<SectorAllocationPanelProps> = ({ className }) => {
@@ -36,69 +35,38 @@ export const SectorAllocationPanel: React.FC<SectorAllocationPanelProps> = ({ cl
   const [viewMode, setViewMode] = useState<'allocation' | 'performance'>('allocation');
 
   useEffect(() => {
-    // Simulate fetching sector data
-    // In production, this would be a real API call
+    // Fetch real sector analysis from API
     const fetchSectorData = async () => {
       try {
-        const mockData: SectorData[] = [
-          {
-            name: 'Technology',
-            allocation: 45,
-            target: 40,
-            performance: 12.5,
-            momentum: 'bullish',
-            stocks: 8,
-            avgScore: 78,
-            riskLevel: 'medium'
-          },
-          {
-            name: 'Healthcare',
-            allocation: 20,
-            target: 25,
-            performance: 8.3,
-            momentum: 'bullish',
-            stocks: 4,
-            avgScore: 72,
-            riskLevel: 'low'
-          },
-          {
-            name: 'Financial',
-            allocation: 15,
-            target: 15,
-            performance: -2.1,
-            momentum: 'bearish',
-            stocks: 3,
-            avgScore: 65,
-            riskLevel: 'medium'
-          },
-          {
-            name: 'Consumer',
-            allocation: 12,
-            target: 15,
-            performance: 5.7,
-            momentum: 'neutral',
-            stocks: 4,
-            avgScore: 69,
-            riskLevel: 'low'
-          },
-          {
-            name: 'Energy',
-            allocation: 8,
-            target: 5,
-            performance: 15.2,
-            momentum: 'bullish',
-            stocks: 1,
-            avgScore: 74,
-            riskLevel: 'high'
-          }
-        ];
+        setLoading(true);
 
-        setTimeout(() => {
-          setSectorData(mockData);
-          setLoading(false);
-        }, 1000);
+        const response = await fetch('http://localhost:8010/portfolio/sector-analysis');
+        if (!response.ok) {
+          throw new Error('Failed to fetch sector analysis');
+        }
+
+        const data = await response.json();
+        const sectors = data.sectors || [];
+
+        // Map API response to component data structure
+        const mappedSectorData: SectorData[] = sectors.map((sector: any) => ({
+          name: sector.name,
+          allocation: sector.allocation,
+          target: sector.target,
+          performance: sector.performance,
+          momentum: sector.momentum as 'bullish' | 'bearish' | 'neutral',
+          stocks: sector.stocks,
+          avgScore: sector.avgScore,
+          riskLevel: sector.riskLevel as 'low' | 'medium' | 'high'
+        }));
+
+        setSectorData(mappedSectorData);
       } catch (error) {
         console.error('Failed to fetch sector data:', error);
+
+        // Fallback to empty state on error
+        setSectorData([]);
+      } finally {
         setLoading(false);
       }
     };
