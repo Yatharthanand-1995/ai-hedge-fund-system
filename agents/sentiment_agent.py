@@ -25,6 +25,12 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +57,7 @@ class SentimentAgent:
         # Initialize LLM clients
         self.openai_client = None
         self.anthropic_client = None
+        self.gemini_client = None
 
         if enable_llm:
             self._initialize_llm_clients()
@@ -69,6 +76,12 @@ class SentimentAgent:
             if ANTHROPIC_AVAILABLE and os.getenv('ANTHROPIC_API_KEY'):
                 self.anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
                 logger.info("Anthropic client initialized for sentiment analysis")
+
+            # Gemini setup
+            if GEMINI_AVAILABLE and os.getenv('GEMINI_API_KEY'):
+                genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+                self.gemini_client = genai.GenerativeModel('gemini-pro')
+                logger.info("Gemini client initialized for sentiment analysis")
 
         except Exception as e:
             logger.warning(f"Failed to initialize LLM clients: {e}")
@@ -104,7 +117,7 @@ class SentimentAgent:
 
             # Get LLM-powered news sentiment if available
             news_sentiment_score = 50.0  # Default neutral
-            if self.enable_llm and (self.openai_client or self.anthropic_client):
+            if self.enable_llm and (self.openai_client or self.anthropic_client or self.gemini_client):
                 try:
                     news_sentiment_score = self._analyze_news_sentiment(symbol, info)
                 except Exception as e:
@@ -399,10 +412,14 @@ class SentimentAgent:
             news_summary = self._prepare_news_summary(symbol, news, stock_info)
 
             # Generate sentiment using preferred LLM
-            if self.llm_provider == 'anthropic' and self.anthropic_client:
+            if self.llm_provider == 'gemini' and self.gemini_client:
+                return self._analyze_sentiment_gemini(news_summary)
+            elif self.llm_provider == 'anthropic' and self.anthropic_client:
                 return self._analyze_sentiment_anthropic(news_summary)
             elif self.llm_provider == 'openai' and self.openai_client:
                 return self._analyze_sentiment_openai(news_summary)
+            elif self.gemini_client:  # Fallback to Gemini
+                return self._analyze_sentiment_gemini(news_summary)
             elif self.openai_client:  # Fallback to OpenAI
                 return self._analyze_sentiment_openai(news_summary)
             elif self.anthropic_client:  # Fallback to Anthropic
@@ -523,4 +540,49 @@ Respond with just the numeric score (0-100) and a brief 1-sentence explanation.
 
         except Exception as e:
             logger.error(f"Anthropic sentiment analysis failed: {e}")
+            return 50.0
+
+    def _analyze_sentiment_gemini(self, news_summary: str) -> float:
+        """Analyze sentiment using Google Gemini"""
+        try:
+            prompt = f"""
+Analyze the sentiment of the following news for investment purposes. Return a score from 0-100:
+- 0-20: Very Bearish (strong negative impact on stock price)
+- 21-40: Bearish (negative impact)
+- 41-60: Neutral (minimal impact)
+- 61-80: Bullish (positive impact)
+- 81-100: Very Bullish (strong positive impact)
+
+Consider:
+1. Impact on company fundamentals
+2. Market reaction potential
+3. Short-term vs long-term implications
+4. Industry/sector context
+
+{news_summary}
+
+Respond with just the numeric score (0-100) and a brief 1-sentence explanation.
+"""
+
+            response = self.gemini_client.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.3,
+                    max_output_tokens=100,
+                )
+            )
+
+            response_text = response.text.strip()
+
+            # Extract numeric score
+            import re
+            score_match = re.search(r'\b(\d{1,3})\b', response_text)
+            if score_match:
+                score = float(score_match.group(1))
+                return max(0, min(100, score))
+
+            return 50.0
+
+        except Exception as e:
+            logger.error(f"Gemini sentiment analysis failed: {e}")
             return 50.0

@@ -22,6 +22,10 @@ import time
 from functools import lru_cache
 import concurrent.futures
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()  # Load .env file from project root
+
 # Add the root project directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -137,12 +141,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Get LLM provider from environment (default: gemini)
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini')  # Options: openai, anthropic, gemini
+
 # Global instances
 fundamentals_agent = FundamentalsAgent()
 momentum_agent = MomentumAgent()
 quality_agent = QualityAgent()
-sentiment_agent = SentimentAgent()
-narrative_engine = InvestmentNarrativeEngine()
+sentiment_agent = SentimentAgent(llm_provider=LLM_PROVIDER)
+narrative_engine = InvestmentNarrativeEngine(llm_provider=LLM_PROVIDER)
 portfolio_manager = PortfolioManager()
 stock_scorer = StockScorer()
 data_provider = EnhancedYahooProvider()

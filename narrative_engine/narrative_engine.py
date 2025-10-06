@@ -24,6 +24,12 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +47,7 @@ class InvestmentNarrativeEngine:
         # Initialize LLM clients
         self.openai_client = None
         self.anthropic_client = None
+        self.gemini_client = None
 
         if enable_llm:
             self._initialize_llm_clients()
@@ -59,6 +66,12 @@ class InvestmentNarrativeEngine:
             if ANTHROPIC_AVAILABLE and os.getenv('ANTHROPIC_API_KEY'):
                 self.anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
                 logger.info("Anthropic client initialized")
+
+            # Gemini setup
+            if GEMINI_AVAILABLE and os.getenv('GEMINI_API_KEY'):
+                genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+                self.gemini_client = genai.GenerativeModel('gemini-pro')
+                logger.info("Gemini client initialized")
 
         except Exception as e:
             logger.warning(f"Failed to initialize LLM clients: {e}")
@@ -162,10 +175,14 @@ class InvestmentNarrativeEngine:
             data_summary = self._prepare_llm_data(symbol, company_name, overall_score, agent_results, stock_info)
 
             # Generate thesis using preferred LLM
-            if self.llm_provider == 'anthropic' and self.anthropic_client:
+            if self.llm_provider == 'gemini' and self.gemini_client:
+                return self._generate_gemini_thesis(data_summary)
+            elif self.llm_provider == 'anthropic' and self.anthropic_client:
                 return self._generate_anthropic_thesis(data_summary)
             elif self.llm_provider == 'openai' and self.openai_client:
                 return self._generate_openai_thesis(data_summary)
+            elif self.gemini_client:  # Fallback to Gemini
+                return self._generate_gemini_thesis(data_summary)
             elif self.openai_client:  # Fallback to OpenAI
                 return self._generate_openai_thesis(data_summary)
             elif self.anthropic_client:  # Fallback to Anthropic
@@ -247,6 +264,25 @@ class InvestmentNarrativeEngine:
 
         except Exception as e:
             logger.error(f"Anthropic thesis generation failed: {e}")
+            raise
+
+    def _generate_gemini_thesis(self, data_summary: Dict) -> str:
+        """Generate investment thesis using Google Gemini"""
+        try:
+            prompt = self._create_investment_prompt(data_summary)
+
+            response = self.gemini_client.generate_content(
+                f"You are a professional hedge fund analyst with 15+ years of experience. Generate sophisticated, institutional-quality investment theses.\n\n{prompt}",
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=800,
+                )
+            )
+
+            return response.text.strip()
+
+        except Exception as e:
+            logger.error(f"Gemini thesis generation failed: {e}")
             raise
 
     def _create_investment_prompt(self, data: Dict) -> str:

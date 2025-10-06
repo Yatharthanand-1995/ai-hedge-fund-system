@@ -179,12 +179,26 @@ The system operates on a curated universe defined in `data/us_top_100_stocks.py`
 Optional environment variables for enhanced features:
 
 ```bash
+# LLM Provider Selection (default: gemini)
+LLM_PROVIDER=gemini            # Options: openai, anthropic, gemini
+
+# API Keys (only one required based on LLM_PROVIDER)
 OPENAI_API_KEY=your_key        # For GPT-based sentiment analysis
 ANTHROPIC_API_KEY=your_key     # For Claude-based sentiment analysis
+GEMINI_API_KEY=your_key        # For Gemini-based sentiment analysis (recommended)
 NEWS_API_KEY=your_key           # For news sentiment analysis
 ```
 
-LLM integration is optional and gracefully degrades if keys are not provided.
+**LLM Provider Details:**
+- **Gemini** (default): Google's Gemini 1.5 Flash - Fast, cost-effective, free tier available
+- **OpenAI**: GPT-3.5-turbo - High quality, requires paid API key
+- **Anthropic**: Claude 3 Haiku/Sonnet - Excellent reasoning, requires paid API key
+
+LLM integration is optional and gracefully degrades if keys are not provided. The system uses LLMs for:
+1. News sentiment analysis in the Sentiment Agent (25% weight)
+2. Sophisticated investment thesis generation in the Narrative Engine
+
+To get a Gemini API key (free): https://makersuite.google.com/app/apikey
 
 ## Common Development Tasks
 
