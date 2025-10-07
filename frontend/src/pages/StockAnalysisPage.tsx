@@ -5,6 +5,8 @@ import { StockFilterBar } from '../components/screener/StockFilterBar';
 import type { FilterState, SortConfig } from '../components/screener/StockFilterBar';
 import { StockSummaryCards } from '../components/screener/StockSummaryCards';
 import { StockScreenerTable } from '../components/screener/StockScreenerTable';
+import { MarketRegimePanel } from '../components/dashboard/MarketRegimePanel';
+import { MarketRegimeBadge } from '../components/dashboard/MarketRegimeBadge';
 
 interface AgentScores {
   fundamentals: number;
@@ -189,9 +191,12 @@ export const StockAnalysisPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-foreground mb-2">
-            📊 AI Stock Screener
-          </h1>
+          <div className="flex items-center space-x-3 mb-2">
+            <h1 className="text-4xl font-bold text-foreground">
+              📊 AI Stock Screener
+            </h1>
+            <MarketRegimeBadge size="lg" />
+          </div>
           <p className="text-xl text-muted-foreground">
             Real-time analysis of 50 elite stocks powered by 4-agent AI system
           </p>
@@ -246,6 +251,9 @@ export const StockAnalysisPage: React.FC = () => {
         <>
           {/* Summary Cards */}
           <StockSummaryCards stocks={stocks} />
+
+          {/* Market Regime Panel */}
+          <MarketRegimePanel />
 
           {/* Filter Bar */}
           <StockFilterBar

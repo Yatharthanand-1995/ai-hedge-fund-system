@@ -435,6 +435,77 @@ async def health_check():
             agents_status={"error": str(e)}
         )
 
+@app.get("/market/regime", tags=["System"])
+async def get_market_regime(force_refresh: bool = False):
+    """
+    Get current market regime and adaptive agent weights
+
+    Market regimes are detected using SPY data analysis:
+    - **Trend**: BULL, BEAR, or SIDEWAYS market
+    - **Volatility**: HIGH_VOL, NORMAL_VOL, or LOW_VOL
+    - **Adaptive Weights**: Agent weights automatically adjust based on regime
+
+    **Caching**: Regime data is cached for 6 hours by default
+
+    **Example Response:**
+    ```json
+    {
+        "regime": "BULL_NORMAL_VOL",
+        "trend": "BULL",
+        "volatility": "NORMAL_VOL",
+        "weights": {
+            "fundamentals": 0.4,
+            "momentum": 0.3,
+            "quality": 0.2,
+            "sentiment": 0.1
+        },
+        "explanation": "Bull market with normal volatility - Steady uptrend. Balanced approach.",
+        "timestamp": "2025-10-07T02:30:00",
+        "cache_hit": false,
+        "adaptive_weights_enabled": true
+    }
+    ```
+    """
+    try:
+        from core.market_regime_service import get_market_regime_service
+        import os
+
+        regime_service = get_market_regime_service()
+        regime_info = regime_service.get_current_regime(force_refresh=force_refresh)
+
+        # Get explanation
+        explanation = regime_service.get_regime_explanation(regime_info.get('regime'))
+
+        # Check if adaptive weights are enabled
+        adaptive_enabled = os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false').lower() == 'true'
+
+        return {
+            **regime_info,
+            'explanation': explanation,
+            'adaptive_weights_enabled': adaptive_enabled
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get market regime: {e}")
+        # Return default regime on error
+        return {
+            'regime': 'SIDEWAYS_NORMAL_VOL',
+            'trend': 'SIDEWAYS',
+            'volatility': 'NORMAL_VOL',
+            'weights': {
+                'fundamentals': 0.4,
+                'momentum': 0.3,
+                'quality': 0.2,
+                'sentiment': 0.1
+            },
+            'explanation': 'Using default regime due to detection failure',
+            'timestamp': datetime.now().isoformat(),
+            'cache_hit': False,
+            'adaptive_weights_enabled': False,
+            'error': str(e)
+        }
+
+
 @app.post("/analyze", tags=["Investment Analysis"])
 async def analyze_stock(request: AnalysisRequest):
     """Complete 4-agent analysis with investment narrative generation (PARALLEL EXECUTION)"""

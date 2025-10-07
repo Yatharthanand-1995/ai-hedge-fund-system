@@ -49,10 +49,23 @@ class InvestmentNarrativeEngine:
         self.anthropic_client = None
         self.gemini_client = None
 
+        # Check if adaptive weights are enabled
+        self.use_adaptive_weights = os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false').lower() == 'true'
+        self.market_regime_service = None
+
+        if self.use_adaptive_weights:
+            try:
+                from core.market_regime_service import get_market_regime_service
+                self.market_regime_service = get_market_regime_service()
+                logger.info("✅ Adaptive agent weights ENABLED in narrative engine")
+            except Exception as e:
+                logger.warning(f"Failed to initialize market regime service: {e}")
+                self.use_adaptive_weights = False
+
         if enable_llm:
             self._initialize_llm_clients()
 
-        logger.info(f"{self.name} initialized with LLM={enable_llm}, provider={llm_provider}")
+        logger.info(f"{self.name} initialized with LLM={enable_llm}, provider={llm_provider}, adaptive_weights={self.use_adaptive_weights}")
 
     def _initialize_llm_clients(self):
         """Initialize LLM clients with API keys"""
@@ -76,6 +89,29 @@ class InvestmentNarrativeEngine:
         except Exception as e:
             logger.warning(f"Failed to initialize LLM clients: {e}")
             self.enable_llm = False
+
+    def _get_current_weights(self) -> Dict[str, float]:
+        """Get current agent weights (adaptive or static)"""
+        if self.use_adaptive_weights and self.market_regime_service:
+            try:
+                return self.market_regime_service.get_adaptive_weights()
+            except Exception as e:
+                logger.warning(f"Failed to get adaptive weights, using static: {e}")
+                # Fallback to static weights
+                return {
+                    'fundamentals': 0.4,
+                    'momentum': 0.3,
+                    'quality': 0.2,
+                    'sentiment': 0.1
+                }
+        else:
+            # Static weights (default)
+            return {
+                'fundamentals': 0.4,
+                'momentum': 0.3,
+                'quality': 0.2,
+                'sentiment': 0.1
+            }
 
     def generate_comprehensive_thesis(self, symbol: str, agent_results: Dict,
                                     stock_info: Optional[Dict] = None) -> Dict:
@@ -107,11 +143,15 @@ class InvestmentNarrativeEngine:
             quality = agent_results.get('quality', {})
             sentiment = agent_results.get('sentiment', {})
 
+            # Get adaptive or static weights
+            weights = self._get_current_weights()
+            market_regime_info = None
+
             overall_score = (
-                fundamentals.get('score', 0) * 0.4 +
-                momentum.get('score', 0) * 0.3 +
-                quality.get('score', 0) * 0.2 +
-                sentiment.get('score', 0) * 0.1
+                fundamentals.get('score', 0) * weights['fundamentals'] +
+                momentum.get('score', 0) * weights['momentum'] +
+                quality.get('score', 0) * weights['quality'] +
+                sentiment.get('score', 0) * weights['sentiment']
             )
 
             # Generate individual agent narratives (rule-based backup)
@@ -139,7 +179,15 @@ class InvestmentNarrativeEngine:
             recommendation = self._get_recommendation(overall_score)
             confidence_level = self._get_confidence_level(agent_results)
 
-            return {
+            # Get market regime info if adaptive weights are enabled
+            if self.use_adaptive_weights and self.market_regime_service:
+                try:
+                    market_regime_info = self.market_regime_service.get_current_regime()
+                except Exception as e:
+                    logger.warning(f"Failed to get market regime: {e}")
+                    market_regime_info = None
+
+            result = {
                 'symbol': symbol,
                 'timestamp': datetime.now().isoformat(),
                 'investment_thesis': investment_thesis,
@@ -154,8 +202,19 @@ class InvestmentNarrativeEngine:
                     'momentum': momentum.get('score', 0),
                     'quality': quality.get('score', 0),
                     'sentiment': sentiment.get('score', 0)
-                }
+                },
+                'weights_used': weights
             }
+
+            # Add market regime info if available
+            if market_regime_info:
+                result['market_regime'] = {
+                    'regime': market_regime_info.get('regime'),
+                    'trend': market_regime_info.get('trend'),
+                    'volatility': market_regime_info.get('volatility')
+                }
+
+            return result
 
         except Exception as e:
             logger.error(f"Error generating narrative for {symbol}: {e}")

@@ -7,6 +7,7 @@ import yfinance as yf
 import pandas as pd
 from typing import Dict, List, Optional
 import logging
+import os
 
 from agents import FundamentalsAgent, MomentumAgent, QualityAgent, SentimentAgent
 
@@ -17,26 +18,60 @@ class StockScorer:
     """
     Combines all agent scores to rank stocks
 
-    Agent Weights:
+    Agent Weights (Default - Static):
     - Fundamentals: 40%
     - Momentum: 30%
     - Quality: 20%
     - Sentiment: 10%
+
+    With Adaptive Weights (ENABLE_ADAPTIVE_WEIGHTS=true):
+    - Weights automatically adjust based on market regime
+    - Bull markets: Higher momentum weight
+    - Bear markets: Higher fundamentals/quality weight
+    - High volatility: Higher quality weight
     """
 
-    def __init__(self, sector_mapping: Optional[Dict] = None, agent_weights: Optional[Dict] = None):
+    def __init__(self, sector_mapping: Optional[Dict] = None, agent_weights: Optional[Dict] = None,
+                 use_adaptive_weights: Optional[bool] = None):
         self.fundamentals_agent = FundamentalsAgent()
         self.momentum_agent = MomentumAgent()
         self.quality_agent = QualityAgent(sector_mapping=sector_mapping)
         self.sentiment_agent = SentimentAgent()
 
-        # Weights (use custom if provided, otherwise use defaults)
-        self.weights = agent_weights or {
+        # Default static weights
+        self.default_weights = {
             'fundamentals': 0.40,
             'momentum': 0.30,
             'quality': 0.20,
             'sentiment': 0.10
         }
+
+        # Determine if adaptive weights should be used
+        if use_adaptive_weights is None:
+            # Check environment variable
+            use_adaptive_weights = os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false').lower() == 'true'
+
+        self.use_adaptive_weights = use_adaptive_weights
+
+        # Weights (use custom if provided, otherwise use defaults or adaptive)
+        if agent_weights:
+            self.weights = agent_weights
+            self.use_adaptive_weights = False  # Custom weights override adaptive
+        else:
+            self.weights = self.default_weights.copy()
+
+        # Initialize market regime service if adaptive weights enabled
+        self.market_regime_service = None
+        if self.use_adaptive_weights:
+            try:
+                from core.market_regime_service import get_market_regime_service
+                self.market_regime_service = get_market_regime_service()
+                logger.info("✅ Adaptive agent weights ENABLED (will adjust based on market regime)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize adaptive weights: {e}. Using static weights.")
+                self.use_adaptive_weights = False
+        else:
+            logger.info("Using static agent weights (40/30/20/10)")
 
         logger.info(f"StockScorer initialized with 4 agents (weights: {self.weights})")
 
@@ -50,6 +85,7 @@ class StockScorer:
             symbol: Stock ticker
             price_data: Historical price data (optional, will download if None)
             spy_data: SPY data for relative strength (optional)
+            cached_data: Optional cached data to avoid redundant API calls
 
         Returns:
             {
@@ -58,11 +94,17 @@ class StockScorer:
                 'composite_confidence': 0-1,
                 'agent_scores': {...},
                 'reasoning': str,
-                'rank_category': str  # 'Strong Buy', 'Buy', 'Hold', 'Sell'
+                'rank_category': str,  # 'Strong Buy', 'Buy', 'Hold', 'Sell'
+                'market_regime': str (if adaptive weights enabled),
+                'weights_used': Dict[str, float]
             }
         """
 
         try:
+            # Get current weights (adaptive or static)
+            current_weights = self._get_current_weights()
+            market_regime_info = None
+
             # Download price data if not provided
             if price_data is None:
                 price_data = yf.download(symbol, period='2y', progress=False)
@@ -77,21 +119,29 @@ class StockScorer:
             qual_result = self.quality_agent.analyze(symbol, price_data)
             sent_result = self.sentiment_agent.analyze(symbol, cached_data=cached_data)
 
-            # Calculate weighted composite score
+            # Calculate weighted composite score using current weights
             composite_score = (
-                self.weights['fundamentals'] * fund_result['score'] +
-                self.weights['momentum'] * mom_result['score'] +
-                self.weights['quality'] * qual_result['score'] +
-                self.weights['sentiment'] * sent_result['score']
+                current_weights['fundamentals'] * fund_result['score'] +
+                current_weights['momentum'] * mom_result['score'] +
+                current_weights['quality'] * qual_result['score'] +
+                current_weights['sentiment'] * sent_result['score']
             )
 
             # Composite confidence (weighted average of confidences)
             composite_confidence = (
-                self.weights['fundamentals'] * fund_result['confidence'] +
-                self.weights['momentum'] * mom_result['confidence'] +
-                self.weights['quality'] * qual_result['confidence'] +
-                self.weights['sentiment'] * sent_result['confidence']
+                current_weights['fundamentals'] * fund_result['confidence'] +
+                current_weights['momentum'] * mom_result['confidence'] +
+                current_weights['quality'] * qual_result['confidence'] +
+                current_weights['sentiment'] * sent_result['confidence']
             )
+
+            # Get market regime info if adaptive weights are enabled
+            if self.use_adaptive_weights and self.market_regime_service:
+                try:
+                    market_regime_info = self.market_regime_service.get_current_regime()
+                except Exception as e:
+                    logger.warning(f"Failed to get market regime: {e}")
+                    market_regime_info = None
 
             # Determine rank category
             rank_category = self._get_rank_category(composite_score, composite_confidence)
@@ -101,7 +151,7 @@ class StockScorer:
                 fund_result, mom_result, qual_result, sent_result
             )
 
-            return {
+            result = {
                 'symbol': symbol,
                 'composite_score': round(composite_score, 2),
                 'composite_confidence': round(composite_confidence, 2),
@@ -132,8 +182,19 @@ class StockScorer:
                     **mom_result.get('metrics', {}),
                 },
                 'reasoning': reasoning,
-                'rank_category': rank_category
+                'rank_category': rank_category,
+                'weights_used': current_weights
             }
+
+            # Add market regime info if available
+            if market_regime_info:
+                result['market_regime'] = {
+                    'regime': market_regime_info.get('regime'),
+                    'trend': market_regime_info.get('trend'),
+                    'volatility': market_regime_info.get('volatility')
+                }
+
+            return result
 
         except Exception as e:
             logger.error(f"Failed to score {symbol}: {e}")
@@ -178,6 +239,24 @@ class StockScorer:
         results.sort(key=lambda x: x['composite_score'], reverse=True)
 
         return results
+
+    def _get_current_weights(self) -> Dict[str, float]:
+        """
+        Get current agent weights (adaptive or static)
+
+        Returns:
+            Dict with agent weights
+        """
+        if self.use_adaptive_weights and self.market_regime_service:
+            try:
+                adaptive_weights = self.market_regime_service.get_adaptive_weights()
+                logger.debug(f"Using adaptive weights: {adaptive_weights}")
+                return adaptive_weights
+            except Exception as e:
+                logger.warning(f"Failed to get adaptive weights: {e}. Using static weights.")
+                return self.default_weights.copy()
+        else:
+            return self.weights.copy()
 
     def _get_rank_category(self, score: float, confidence: float) -> str:
         """Categorize stock based on score and confidence"""
