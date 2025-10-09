@@ -83,7 +83,7 @@ class InvestmentNarrativeEngine:
             # Gemini setup
             if GEMINI_AVAILABLE and os.getenv('GEMINI_API_KEY'):
                 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-                self.gemini_client = genai.GenerativeModel('gemini-pro')
+                self.gemini_client = genai.GenerativeModel('gemini-2.0-flash')
                 logger.info("Gemini client initialized")
 
         except Exception as e:

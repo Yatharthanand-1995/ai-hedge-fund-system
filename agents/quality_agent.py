@@ -28,9 +28,15 @@ class QualityAgent:
         self.sector_mapping = sector_mapping or {}
         logger.info(f"{self.name} initialized")
 
-    def analyze(self, symbol: str, data: Optional[pd.DataFrame] = None) -> Dict:
+    def analyze(self, symbol: str, data: Optional[pd.DataFrame] = None,
+                cached_data: Optional[Dict] = None) -> Dict:
         """
         Analyze quality and return score
+
+        Args:
+            symbol: Stock symbol
+            data: Optional price data (deprecated, use cached_data)
+            cached_data: Optional cached data from EnhancedYahooProvider
 
         Returns:
             {
@@ -42,12 +48,17 @@ class QualityAgent:
         """
 
         try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-
-            # Get financial history
-            financials = ticker.financials
-            quarterly_financials = ticker.quarterly_financials
+            # Use cached data if available (faster, reduces API calls)
+            if cached_data:
+                info = cached_data.get('info', {})
+                financials = cached_data.get('financials', pd.DataFrame())
+                quarterly_financials = cached_data.get('quarterly_financials', pd.DataFrame())
+            else:
+                # Fallback to fetching fresh data
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                financials = ticker.financials
+                quarterly_financials = ticker.quarterly_financials
 
             # Calculate scores
             market_position_score = self._score_market_position(info, symbol)

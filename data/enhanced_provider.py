@@ -63,8 +63,8 @@ class EnhancedYahooProvider:
             # Get stock data
             ticker = yf.Ticker(symbol)
 
-            # Get historical data (60 days for technical indicators)
-            hist = ticker.history(period="2mo", interval="1d")
+            # Get historical data (2 years for momentum + technical indicators)
+            hist = ticker.history(period="2y", interval="1d")
             if hist.empty:
                 logger.warning(f"No historical data found for {symbol}")
                 return self._create_empty_data(symbol)
@@ -78,6 +78,10 @@ class EnhancedYahooProvider:
             # Get current price data
             current_data = self._get_current_price_data(hist, info)
 
+            # Get financials data for Quality Agent
+            financials = ticker.financials
+            quarterly_financials = ticker.quarterly_financials
+
             # Combine all data
             comprehensive_data = {
                 **current_data,
@@ -88,7 +92,10 @@ class EnhancedYahooProvider:
                 'industry': info.get('industry', 'Unknown'),
                 'market_cap': info.get('marketCap', 0),
                 'timestamp': datetime.now().isoformat(),
-                'historical_data': hist  # Include historical OHLCV data for signal engine
+                'historical_data': hist,  # Include historical OHLCV data for signal engine
+                'info': info,  # Full company info for Quality Agent
+                'financials': financials,  # Financial statements for Quality Agent
+                'quarterly_financials': quarterly_financials  # Quarterly financials for Quality Agent
             }
 
             # Cache the data

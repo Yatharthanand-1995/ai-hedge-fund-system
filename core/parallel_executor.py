@@ -163,10 +163,9 @@ class ParallelAgentExecutor:
                 comprehensive_data['historical_data']
             ),
             'quality': self._execute_agent_with_retry(
-                self.quality_agent.analyze,
+                lambda s: self.quality_agent.analyze(s, cached_data=comprehensive_data),
                 'Quality',
-                symbol,
-                comprehensive_data
+                symbol
             ),
             'sentiment': self._execute_agent_with_retry(
                 self.sentiment_agent.analyze,

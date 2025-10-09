@@ -16,6 +16,14 @@ try:
 except ImportError:
     DATA_VALIDATOR_AVAILABLE = False
 
+# Import sector-aware scorer
+try:
+    from utils.sector_scorer import sector_scorer
+    from data.us_top_100_stocks import stock_manager
+    SECTOR_SCORER_AVAILABLE = True
+except ImportError:
+    SECTOR_SCORER_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,9 +38,14 @@ class FundamentalsAgent:
     4. Valuation (25%)
     """
 
-    def __init__(self):
+    def __init__(self, enable_sector_scoring=True):
         self.name = "FundamentalsAgent"
-        logger.info(f"{self.name} initialized")
+        self.enable_sector_scoring = enable_sector_scoring and SECTOR_SCORER_AVAILABLE
+
+        if self.enable_sector_scoring:
+            logger.info(f"{self.name} initialized with SECTOR-AWARE SCORING enabled")
+        else:
+            logger.info(f"{self.name} initialized with standard scoring")
 
     def analyze(self, symbol: str, data: Optional[pd.DataFrame] = None,
                 cached_data: Optional[Dict] = None) -> Dict:
@@ -63,11 +76,14 @@ class FundamentalsAgent:
                 balance_sheet = ticker.balance_sheet
                 cash_flow = ticker.cashflow
 
-            # Calculate scores for each category
-            profitability_score = self._score_profitability(info)
-            growth_score = self._score_growth(info, financials)
-            health_score = self._score_financial_health(info, balance_sheet)
-            valuation_score = self._score_valuation(info)
+            # Get sector for sector-aware scoring
+            sector = self._get_sector(symbol, info)
+
+            # Calculate scores for each category (sector-aware if enabled)
+            profitability_score = self._score_profitability(info, sector)
+            growth_score = self._score_growth(info, financials, sector)
+            health_score = self._score_financial_health(info, balance_sheet, sector)
+            valuation_score = self._score_valuation(info, sector)
 
             # Composite score (equal weight)
             composite_score = (
@@ -141,8 +157,33 @@ class FundamentalsAgent:
                     'reasoning': f"Analysis failed: {str(e)}"
                 }
 
-    def _score_profitability(self, info: Dict) -> float:
-        """Score based on profitability metrics (0-100)"""
+    def _get_sector(self, symbol: str, info: Dict) -> str:
+        """Get sector for symbol"""
+        if SECTOR_SCORER_AVAILABLE:
+            sector = stock_manager.get_sector_for_symbol(symbol)
+            if sector != 'Unknown':
+                return sector
+
+        # Fallback to yfinance sector
+        return info.get('sector', 'Unknown')
+
+    def _score_profitability(self, info: Dict, sector: str = 'Unknown') -> float:
+        """Score based on profitability metrics (0-100) with sector awareness"""
+
+        if self.enable_sector_scoring and sector != 'Unknown':
+            # Use sector-aware scoring
+            roe = info.get('returnOnEquity', 0) * 100
+            net_margin = info.get('profitMargins', 0) * 100
+            op_margin = info.get('operatingMargins', 0) * 100
+
+            roe_score = sector_scorer.score_roe_sector_adjusted(roe, sector)
+            margin_score = sector_scorer.score_net_margin_sector_adjusted(net_margin, sector)
+            # Op margin uses similar logic to net margin
+            op_margin_score = sector_scorer.score_net_margin_sector_adjusted(op_margin, sector)
+
+            return min(roe_score + margin_score + op_margin_score, 100)
+
+        # Fallback to original scoring
         score = 0.0
 
         # ROE (Return on Equity) - Optimized for Mega-Cap Excellence
@@ -186,8 +227,21 @@ class FundamentalsAgent:
 
         return min(score, 100)
 
-    def _score_growth(self, info: Dict, financials: pd.DataFrame) -> float:
-        """Score based on growth metrics (0-100)"""
+    def _score_growth(self, info: Dict, financials: pd.DataFrame, sector: str = 'Unknown') -> float:
+        """Score based on growth metrics (0-100) with sector awareness"""
+
+        if self.enable_sector_scoring and sector != 'Unknown':
+            # Use sector-aware scoring for revenue growth
+            revenue_growth = info.get('revenueGrowth', 0) * 100
+            revenue_score = sector_scorer.score_revenue_growth_sector_adjusted(revenue_growth, sector)
+
+            # Earnings growth uses similar approach
+            earnings_growth = info.get('earningsGrowth', 0) * 100
+            earnings_score = sector_scorer.score_revenue_growth_sector_adjusted(earnings_growth, sector)
+
+            return min(revenue_score + earnings_score, 100)
+
+        # Fallback to original scoring
         score = 0.0
 
         # Revenue Growth - Realistic for Mature Mega-Caps
@@ -230,8 +284,40 @@ class FundamentalsAgent:
 
         return min(score, 100)
 
-    def _score_financial_health(self, info: Dict, balance_sheet: pd.DataFrame) -> float:
-        """Score based on financial health (0-100)"""
+    def _score_financial_health(self, info: Dict, balance_sheet: pd.DataFrame, sector: str = 'Unknown') -> float:
+        """Score based on financial health (0-100) with sector awareness"""
+
+        if self.enable_sector_scoring and sector != 'Unknown':
+            # Use sector-aware scoring for debt
+            debt_to_equity = info.get('debtToEquity', 0)
+            debt_score = sector_scorer.score_debt_to_equity_sector_adjusted(debt_to_equity, sector)
+
+            # Current ratio and FCF use standard scoring (not as sector-dependent)
+            current_ratio = info.get('currentRatio', 0)
+            if current_ratio > 2.0:
+                liquidity_score = 35
+            elif current_ratio > 1.5:
+                liquidity_score = 25
+            elif current_ratio > 1.0:
+                liquidity_score = 15
+            else:
+                liquidity_score = 0
+
+            # Free Cash Flow
+            fcf = info.get('freeCashflow', 0)
+            if fcf > 0:
+                fcf_score = 30
+                # Bonus for strong FCF
+                market_cap = info.get('marketCap', 1)
+                fcf_yield = (fcf / market_cap) * 100 if market_cap > 0 else 0
+                if fcf_yield > 5:
+                    fcf_score += 10
+            else:
+                fcf_score = 0
+
+            return min(debt_score + liquidity_score + fcf_score, 100)
+
+        # Fallback to original scoring
         score = 0.0
 
         # Current Ratio (liquidity)
@@ -266,8 +352,38 @@ class FundamentalsAgent:
 
         return min(score, 100)
 
-    def _score_valuation(self, info: Dict) -> float:
-        """Score based on valuation metrics (0-100)"""
+    def _score_valuation(self, info: Dict, sector: str = 'Unknown') -> float:
+        """Score based on valuation metrics (0-100) with sector awareness"""
+
+        if self.enable_sector_scoring and sector != 'Unknown':
+            # Use sector-aware scoring for P/E
+            pe = info.get('trailingPE', 0)
+            pe_score = sector_scorer.score_pe_ratio_sector_adjusted(pe, sector)
+
+            # P/B and PEG use standard scoring (less sector-dependent)
+            pb = info.get('priceToBook', 0)
+            if 0 < pb < 2:
+                pb_score = 30
+            elif pb < 3:
+                pb_score = 20
+            elif pb < 5:
+                pb_score = 10
+            else:
+                pb_score = 0
+
+            peg = info.get('pegRatio', 0)
+            if 0 < peg < 1:
+                peg_score = 30
+            elif peg < 1.5:
+                peg_score = 20
+            elif peg < 2:
+                peg_score = 10
+            else:
+                peg_score = 0
+
+            return min(pe_score + pb_score + peg_score, 100)
+
+        # Fallback to original scoring
         score = 0.0
 
         # P/E Ratio
