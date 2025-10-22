@@ -58,40 +58,35 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
   });
 
   useEffect(() => {
-    // Load backtest results, preferring real data but falling back to enhanced mock data
+    // Load backtest history from API
     loadBacktestHistory();
   }, []);
 
   const loadBacktestHistory = async () => {
     try {
-      setLoading(true);
-
-      // Try to get real portfolio data first to enhance mock results
-      let enhancedMockData = await generateEnhancedMockData();
-
-      // Try to fetch from API
+      // Fetch backtest history from API
       const response = await fetch('http://localhost:8010/backtest/history');
       if (response.ok) {
-        const results = await response.json();
-        if (results && results.length > 0) {
-          setBacktestResults(results);
-          setSelectedResult(results[0]);
-          return;
+        const data = await response.json();
+        console.log(`✅ Loaded ${data.length} backtest results from API`);
+
+        if (data.length > 0) {
+          setBacktestResults(data);
+          setSelectedResult(data[0]);
+        } else {
+          console.log('ℹ️ No backtest history found yet. Run a backtest to see results.');
+          setBacktestResults([]);
+          setSelectedResult(null);
         }
+      } else {
+        console.log('No backtest history available');
+        setBacktestResults([]);
+        setSelectedResult(null);
       }
-
-      // Fallback to enhanced mock data based on real portfolio
-      setBacktestResults(enhancedMockData);
-      setSelectedResult(enhancedMockData[0]);
-
     } catch (error) {
       console.error('Failed to load backtest history:', error);
-      // Final fallback to basic mock data
-      const basicMockData = await generateEnhancedMockData(true);
-      setBacktestResults(basicMockData);
-      setSelectedResult(basicMockData[0]);
-    } finally {
-      setLoading(false);
+      setBacktestResults([]);
+      setSelectedResult(null);
     }
   };
 
@@ -202,33 +197,46 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     try {
       setIsRunning(true);
 
-      // Try API first
+      console.log('🚀 Running backtest with config:', config);
+
+      // Call the real backtest API with 60s timeout (backtests can take time)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch('http://localhost:8010/backtest/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify(config),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const apiResult = await response.json();
+        console.log('✅ Backtest completed successfully:', apiResult);
+
         if (apiResult && apiResult.results) {
-          setBacktestResults(prev => [apiResult.results, ...prev]);
-          setSelectedResult(apiResult.results);
+          // Backtest was saved to storage backend, now reload history to get updated list
+          await loadBacktestHistory();
+          console.log('✅ Backtest history reloaded from storage');
           return;
         }
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Backtest API failed:', response.status, errorText);
+        throw new Error(`Backtest failed: ${response.status}`);
       }
 
-      // Fallback to generating realistic backtest from real portfolio data
-      const enhancedResults = await generateConfigBasedBacktest(config);
-      setBacktestResults(prev => [enhancedResults, ...prev]);
-      setSelectedResult(enhancedResults);
+      throw new Error('No results returned from backtest API');
 
     } catch (error) {
-      console.error('Backtest failed:', error);
-      // Generate a basic backtest result
-      const basicResult = generateBasicBacktestResult(config);
-      setBacktestResults(prev => [basicResult, ...prev]);
-      setSelectedResult(basicResult);
+      console.error('❌ Backtest failed with error:', error);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        alert('Backtest timed out after 60 seconds.\n\nThis usually happens for long time periods (multi-year backtests).\n\nTry:\n• Shorter date range (1-6 months)\n• Smaller stock universe\n• Monthly instead of quarterly rebalancing');
+      } else {
+        alert(`Backtest failed: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease ensure the API server is running on localhost:8010`);
+      }
     } finally {
       setIsRunning(false);
     }
@@ -483,8 +491,112 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
         </div>
       </div>
 
+      {/* Empty State */}
+      {!selectedResult && backtestResults.length === 0 && (
+        <div className="text-center py-12">
+          <Activity className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+          <h3 className="text-xl font-semibold text-foreground mb-2">No Backtest History</h3>
+          <p className="text-muted-foreground mb-6">
+            Run your first backtest to see results here. All backtest runs will be saved and tracked.
+          </p>
+          <button
+            onClick={runBacktest}
+            disabled={isRunning}
+            className="bg-accent hover:bg-accent/80 text-accent-foreground px-6 py-3 rounded-lg font-medium transition-colors inline-flex items-center space-x-2"
+          >
+            <Play className="h-5 w-5" />
+            <span>Run Your First Backtest</span>
+          </button>
+        </div>
+      )}
+
+      {/* Backtest History List */}
+      {backtestResults.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-foreground mb-3">Backtest History ({backtestResults.length} results)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {backtestResults.map((result, index) => {
+              const isSelected = selectedResult?.start_date === result.start_date &&
+                                selectedResult?.end_date === result.end_date;
+              return (
+                <button
+                  key={index}
+                  onClick={() => setSelectedResult(result)}
+                  className={cn(
+                    'professional-card p-4 text-left transition-all hover:scale-[1.02]',
+                    isSelected ? 'ring-2 ring-accent bg-accent/10' : 'bg-muted/20 hover:bg-muted/30'
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 text-accent" />
+                      <span className="font-medium text-foreground">
+                        {result.start_date} → {result.end_date}
+                      </span>
+                    </div>
+                    <span className={cn(
+                      'text-sm font-semibold',
+                      getPerformanceColor(result.total_return)
+                    )}>
+                      {formatPercentage(result.total_return * 100)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div className="text-muted-foreground">Sharpe</div>
+                      <div className={cn('font-semibold', getSharpeColor(result.metrics.sharpe_ratio))}>
+                        {result.metrics.sharpe_ratio.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Max DD</div>
+                      <div className="font-semibold text-red-400">
+                        {formatPercentage(result.metrics.max_drawdown * 100)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Rebalances</div>
+                      <div className="font-semibold text-foreground">
+                        {result.rebalances}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {selectedResult && (
         <>
+          {/* Selected Backtest Header */}
+          <div className="mb-4 p-4 bg-accent/10 border border-accent/20 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  {selectedResult.start_date} to {selectedResult.end_date}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Real 4-Agent Analysis • {selectedResult.rebalances} Rebalances •
+                  {(() => {
+                    const startDate = new Date(selectedResult.start_date);
+                    const endDate = new Date(selectedResult.end_date);
+                    const years = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                    const cagr = Math.pow(selectedResult.final_value / selectedResult.initial_capital, 1 / years) - 1;
+                    return ` CAGR: ${formatPercentage(cagr * 100)}`;
+                  })()}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-muted-foreground">Agent Weights (Backtest Mode)</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  M:50% • Q:40% • F:5% • S:5%
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Performance Summary */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="professional-card p-4 bg-muted/20">
@@ -496,7 +608,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
                 {formatPercentage(selectedResult.total_return * 100)}
               </div>
               <div className="text-xs text-muted-foreground">
-                vs Benchmark: {formatPercentage(selectedResult.outperformance_vs_benchmark * 100)}
+                vs SPY: {formatPercentage(selectedResult.outperformance_vs_spy * 100)}
               </div>
             </div>
 

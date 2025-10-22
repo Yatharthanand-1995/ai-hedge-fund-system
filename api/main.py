@@ -214,6 +214,12 @@ def sanitize_dict(data):
         return [sanitize_dict(item) for item in data]
     elif isinstance(data, tuple):
         return tuple(sanitize_dict(item) for item in data)
+    elif isinstance(data, pd.Series):
+        # Convert pandas Series to list and sanitize
+        return sanitize_dict(data.tolist())
+    elif isinstance(data, pd.DataFrame):
+        # Convert pandas DataFrame to list of dicts and sanitize
+        return sanitize_dict(data.to_dict('records'))
     elif isinstance(data, (np.ndarray,)):
         return sanitize_dict(data.tolist())
     else:
@@ -1196,11 +1202,16 @@ async def add_or_update_position(position: UpdatePositionRequest):
         logger.info(f"Adding/updating position: {position.symbol}")
         portfolio = load_user_portfolio()
 
+        # Calculate total cost for this position
+        total_cost = position.shares * position.cost_basis
+
         # Check if position already exists
         existing_position_index = None
+        old_position_cost = 0
         for i, pos in enumerate(portfolio['positions']):
             if pos['symbol'].upper() == position.symbol.upper():
                 existing_position_index = i
+                old_position_cost = pos['shares'] * pos['cost_basis']
                 break
 
         new_position = {
@@ -1213,10 +1224,21 @@ async def add_or_update_position(position: UpdatePositionRequest):
 
         if existing_position_index is not None:
             # Update existing position
+            # Refund old position cost and charge new position cost
+            cash_change = old_position_cost - total_cost
+            portfolio['cash'] = portfolio['cash'] + cash_change
             portfolio['positions'][existing_position_index] = new_position
             message = f"Position {position.symbol} updated"
         else:
-            # Add new position
+            # Add new position - check if enough cash
+            if portfolio['cash'] < total_cost:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient cash. Available: ${portfolio['cash']:.2f}, Required: ${total_cost:.2f}"
+                )
+
+            # Deduct cash and add position
+            portfolio['cash'] = portfolio['cash'] - total_cost
             portfolio['positions'].append(new_position)
             message = f"Position {position.symbol} added"
 
@@ -1228,6 +1250,8 @@ async def add_or_update_position(position: UpdatePositionRequest):
             'portfolio': portfolio
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to add/update position: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1415,101 +1439,70 @@ class BacktestResults(BaseModel):
 @app.post("/backtest/run", response_model=BacktestResults, tags=["Backtesting"])
 async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks):
     """
-    Run a comprehensive backtest of the 4-agent strategy using real portfolio analysis
+    Run a comprehensive backtest of the 4-agent strategy using REAL historical data
+
+    🔧 FIX (2025-10-10): This endpoint now redirects to the real historical backtest engine
+    instead of generating synthetic returns. Uses actual 4-agent analysis on historical data.
     """
     try:
-        logger.info(f"Starting real-data backtest: {config.start_date} to {config.end_date}")
+        logger.info(f"🚀 Running real historical backtest with 4-agent analysis: {config.start_date} to {config.end_date}")
 
-        # Get top picks to use for backtest simulation
-        top_picks_response = await get_top_picks(limit=config.top_n)
-        top_picks = top_picks_response["top_picks"]
+        # Check if historical backtest engine is available
+        if not HISTORICAL_BACKTEST_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Historical backtesting engine not available. Please ensure core.backtesting_engine is installed."
+            )
 
-        if not top_picks:
-            raise HTTPException(status_code=404, detail="No portfolio data available for backtest")
+        # Create engine configuration with backtest mode enabled
+        # This uses weights that emphasize agents with real historical data:
+        # Momentum (50%), Quality (40%), Fundamentals (5%), Sentiment (5%)
+        engine_config = EngineConfig(
+            start_date=config.start_date,
+            end_date=config.end_date,
+            initial_capital=config.initial_capital,
+            rebalance_frequency=config.rebalance_frequency,
+            top_n_stocks=config.top_n,
+            universe=config.universe if config.universe else US_TOP_100_STOCKS,
+            transaction_cost=0.001,
+            backtest_mode=True  # Use backtest-specific weights to minimize look-ahead bias
+        )
 
-        # Calculate backtest metrics based on real portfolio analysis
-        avg_score = sum(pick["overall_score"] for pick in top_picks) / len(top_picks)
-        score_std = (sum((pick["overall_score"] - avg_score) ** 2 for pick in top_picks) / len(top_picks)) ** 0.5
+        # Run real historical backtest with 4-agent analysis
+        engine = HistoricalBacktestEngine(engine_config)
+        result = engine.run_backtest()
 
-        # Simulate realistic performance based on AI scores
-        base_return = (avg_score - 50) * 0.4 / 100  # Base annual return from score
-        volatility = max(0.10, score_std * 0.02)  # Volatility based on score dispersion
-
-        # Calculate time period
-        start_date = datetime.fromisoformat(config.start_date)
-        end_date = datetime.fromisoformat(config.end_date)
-        years = (end_date - start_date).days / 365.25
-
-        # Simulate total return with realistic bounds
-        total_return = base_return * years + np.random.normal(0, volatility * years ** 0.5)
-        total_return = max(-0.5, min(3.0, total_return))  # Cap between -50% and 300%
-
-        # Generate equity curve
-        periods = max(12, int(years * 12))  # Monthly periods
-        equity_curve = []
-        current_value = config.initial_capital
-
-        for i in range(periods + 1):
-            period_date = start_date + timedelta(days=int(i * 365.25 / 12))
-            if i == 0:
-                period_return = 0.0
-            else:
-                # Smooth return progression with some randomness
-                progress = i / periods
-                target_return = total_return * progress
-                period_return = target_return + np.random.normal(0, volatility / 12) * 0.5
-                period_return = max(-0.3, min(1.0, period_return))  # Cap monthly swings
-
-            current_value = config.initial_capital * (1 + period_return)
-            equity_curve.append({
-                "date": period_date.strftime("%Y-%m-%d"),
-                "value": round(current_value, 2),
-                "return": round(period_return, 4)
-            })
-
-        # Calculate performance metrics
-        final_value = config.initial_capital * (1 + total_return)
-        benchmark_return = total_return * 0.8  # Assume we beat benchmark
-        spy_return = total_return * 0.75  # Assume we beat SPY
-
-        # Risk metrics
-        returns = [point["return"] for point in equity_curve[1:]]
-        sharpe_ratio = max(0.5, (total_return / years) / volatility) if volatility > 0 else 1.0
-        max_drawdown = min(0.15, volatility * 1.5)  # Estimated max drawdown
-
-        # Generate rebalance log
-        rebalance_log = []
-        rebalance_freq = 3 if config.rebalance_frequency == "quarterly" else 1
-        for i in range(0, periods, rebalance_freq):
-            rebalance_date = start_date + timedelta(days=int(i * 365.25 / 12))
-            portfolio_symbols = [pick["symbol"] for pick in top_picks[:config.top_n]]
-
-            rebalance_log.append({
-                "date": rebalance_date.strftime("%Y-%m-%d"),
-                "portfolio": portfolio_symbols,
-                "portfolio_value": round(config.initial_capital * (1 + total_return * (i / periods)), 2),
-                "avg_score": round(avg_score + np.random.normal(0, 2), 1)
-            })
-
-        results = {
-            "start_date": config.start_date,
-            "end_date": config.end_date,
-            "initial_capital": config.initial_capital,
-            "final_value": round(final_value, 2),
-            "total_return": round(total_return, 4),
-            "benchmark_return": round(benchmark_return, 4),
-            "spy_return": round(spy_return, 4),
-            "outperformance_vs_benchmark": round(total_return - benchmark_return, 4),
-            "outperformance_vs_spy": round(total_return - spy_return, 4),
-            "rebalances": len(rebalance_log),
+        # Convert engine result to API response format (sanitize pandas/numpy objects)
+        results = sanitize_dict({
+            "start_date": result.start_date,
+            "end_date": result.end_date,
+            "initial_capital": result.initial_capital,
+            "final_value": result.final_value,
+            "total_return": result.total_return,
+            "benchmark_return": result.spy_return,  # Use SPY as benchmark
+            "spy_return": result.spy_return,
+            "outperformance_vs_benchmark": result.outperformance_vs_spy,
+            "outperformance_vs_spy": result.outperformance_vs_spy,
+            "rebalances": result.num_rebalances,
             "metrics": {
-                "sharpe_ratio": round(sharpe_ratio, 2),
-                "max_drawdown": round(max_drawdown, 3),
-                "volatility": round(volatility, 3)
+                "sharpe_ratio": result.sharpe_ratio,
+                "max_drawdown": result.max_drawdown,
+                "volatility": result.volatility,
+                "cagr": result.cagr,
+                "sortino_ratio": result.sortino_ratio,
+                "calmar_ratio": result.calmar_ratio
             },
-            "equity_curve": equity_curve,
-            "rebalance_log": rebalance_log
-        }
+            "equity_curve": result.equity_curve,
+            "rebalance_log": [
+                {
+                    "date": event['date'],
+                    "portfolio": event['selected_stocks'],
+                    "portfolio_value": event['portfolio_value'],
+                    "avg_score": event['avg_score']
+                }
+                for event in result.rebalance_events
+            ]
+        })
 
         backtest_result = {
             "config": config.dict(),
@@ -1517,7 +1510,29 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
             "timestamp": datetime.now().isoformat()
         }
 
-        logger.info(f"Real-data backtest completed. Total return: {total_return*100:.1f}%")
+        logger.info(f"✅ Real historical backtest completed. Total return: {result.total_return*100:.1f}%, CAGR: {result.cagr*100:.1f}%")
+
+        # Save backtest result to storage for history tracking
+        try:
+            from data.backtest_storage import get_backtest_storage
+            import uuid
+
+            storage = get_backtest_storage()
+            backtest_id = str(uuid.uuid4())
+
+            # Sanitize ALL data to ensure pandas/numpy objects are JSON-serializable
+            sanitized_config = sanitize_dict(config.dict())
+            sanitized_results = sanitize_dict(results)
+
+            storage.save_result(backtest_id, sanitized_config, sanitized_results, backtest_result['timestamp'])
+
+            # Add backtest ID to response
+            backtest_result['backtest_id'] = backtest_id
+            logger.info(f"💾 Saved backtest result with ID: {backtest_id}")
+        except Exception as save_error:
+            # Don't fail the request if storage fails
+            logger.warning(f"Failed to save backtest result: {save_error}")
+
         return BacktestResults(**backtest_result)
 
     except Exception as e:
@@ -1526,148 +1541,38 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
 
 
 @app.get("/backtest/history", tags=["Backtesting"])
-async def get_backtest_history():
+async def get_backtest_history(limit: int = 10):
     """
-    Get history of previous backtest runs with real portfolio-based data
+    Get history of previous backtest runs from stored results
+
+    🔧 FIX (2025-10-10): This endpoint now returns REAL stored backtest results
+    instead of generating synthetic scenarios. Shows actual historical backtests.
+
+    Args:
+        limit: Maximum number of backtest results to return (default 10)
     """
     try:
-        logger.info("Generating backtest history from portfolio analysis")
+        logger.info(f"Fetching backtest history (limit: {limit})")
 
-        # Get current portfolio performance to generate realistic history
-        top_picks_response = await get_top_picks(limit=10)
-        top_picks = top_picks_response["top_picks"]
+        # Get stored backtest results from storage
+        from data.backtest_storage import get_backtest_storage
 
-        if not top_picks:
-            # Return basic fallback history
-            return [{
-                "start_date": "2023-01-01",
-                "end_date": "2024-01-01",
-                "initial_capital": 100000,
-                "final_value": 105000,
-                "total_return": 0.05,
-                "benchmark_return": 0.03,
-                "spy_return": 0.025,
-                "outperformance_vs_benchmark": 0.02,
-                "outperformance_vs_spy": 0.025,
-                "rebalances": 12,
-                "metrics": {
-                    "sharpe_ratio": 1.2,
-                    "max_drawdown": 0.08,
-                    "volatility": 0.15
-                },
-                "equity_curve": [
-                    {"date": "2023-01-01", "value": 100000, "return": 0.0},
-                    {"date": "2024-01-01", "value": 105000, "return": 0.05}
-                ],
-                "rebalance_log": [
-                    {
-                        "date": "2023-12-01",
-                        "portfolio": ["AAPL", "MSFT", "GOOGL"],
-                        "portfolio_value": 105000,
-                        "avg_score": 65.0
-                    }
-                ]
-            }]
+        storage = get_backtest_storage()
+        stored_results = storage.get_all_results(limit=limit)
 
-        # Generate multiple backtest scenarios based on current portfolio
-        avg_score = sum(pick["overall_score"] for pick in top_picks) / len(top_picks)
+        # If no stored results, return empty list with helpful message
+        if not stored_results:
+            logger.info("No backtest history found - returning empty list")
+            return []
 
-        history = []
-        base_scenarios = [
-            {"period": "1Y", "start": "2023-01-01", "end": "2024-01-01", "multiplier": 1.0},
-            {"period": "6M", "start": "2023-07-01", "end": "2024-01-01", "multiplier": 0.6},
-            {"period": "3M", "start": "2023-10-01", "end": "2024-01-01", "multiplier": 0.3},
-        ]
-
-        for scenario in base_scenarios:
-            base_return = (avg_score - 50) * 0.4 / 100 * scenario["multiplier"]
-            volatility = max(0.10, 0.15 * scenario["multiplier"])
-
-            total_return = base_return + np.random.normal(0, volatility * 0.5)
-            total_return = max(-0.2, min(0.5, total_return))
-
-            final_value = 100000 * (1 + total_return)
-            benchmark_return = total_return * 0.85
-            spy_return = total_return * 0.8
-
-            # Generate equity curve for this scenario
-            periods = max(3, int(scenario["multiplier"] * 12))
-            equity_curve = []
-            start_date = datetime.fromisoformat(scenario["start"])
-            end_date = datetime.fromisoformat(scenario["end"])
-
-            for i in range(periods + 1):
-                period_date = start_date + timedelta(days=int(i * (end_date - start_date).days / periods))
-                period_return = total_return * (i / periods) if i > 0 else 0.0
-                current_value = 100000 * (1 + period_return)
-
-                equity_curve.append({
-                    "date": period_date.strftime("%Y-%m-%d"),
-                    "value": round(current_value, 2),
-                    "return": round(period_return, 4)
-                })
-
-            history.append({
-                "start_date": scenario["start"],
-                "end_date": scenario["end"],
-                "initial_capital": 100000,
-                "final_value": round(final_value, 2),
-                "total_return": round(total_return, 4),
-                "benchmark_return": round(benchmark_return, 4),
-                "spy_return": round(spy_return, 4),
-                "outperformance_vs_benchmark": round(total_return - benchmark_return, 4),
-                "outperformance_vs_spy": round(total_return - spy_return, 4),
-                "rebalances": periods,
-                "metrics": {
-                    "sharpe_ratio": round(max(0.8, total_return / volatility), 2),
-                    "max_drawdown": round(min(0.12, volatility * 1.2), 3),
-                    "volatility": round(volatility, 3)
-                },
-                "equity_curve": equity_curve,
-                "rebalance_log": [
-                    {
-                        "date": end_date.strftime("%Y-%m-%d"),
-                        "portfolio": [pick["symbol"] for pick in top_picks[:10]],
-                        "portfolio_value": round(final_value, 2),
-                        "avg_score": round(avg_score, 1)
-                    }
-                ]
-            })
-
-        return history
+        # Return stored results directly (they're already in the correct format from index)
+        logger.info(f"✅ Returning {len(stored_results)} stored backtest results")
+        return stored_results
 
     except Exception as e:
         logger.error(f"Failed to get backtest history: {e}")
-        # Fallback to simple mock data
-        return [{
-            "start_date": "2023-01-01",
-            "end_date": "2024-01-01",
-            "initial_capital": 100000,
-            "final_value": 105000,
-            "total_return": 0.05,
-            "benchmark_return": 0.03,
-            "spy_return": 0.025,
-            "outperformance_vs_benchmark": 0.02,
-            "outperformance_vs_spy": 0.025,
-            "rebalances": 12,
-            "metrics": {
-                "sharpe_ratio": 1.2,
-                "max_drawdown": 0.08,
-                "volatility": 0.15
-            },
-            "equity_curve": [
-                {"date": "2023-01-01", "value": 100000, "return": 0.0},
-                {"date": "2024-01-01", "value": 105000, "return": 0.05}
-            ],
-            "rebalance_log": [
-                {
-                    "date": "2023-12-01",
-                    "portfolio": ["AAPL", "MSFT", "GOOGL"],
-                    "portfolio_value": 105000,
-                    "avg_score": 65.0
-                }
-            ]
-        }]
+        # Return empty list on error
+        return []
 
 
 @app.get("/backtest/quick-stats", tags=["Backtesting"])
@@ -1726,7 +1631,9 @@ async def run_historical_backtest(config: BacktestConfig):
     try:
         logger.info(f"Starting historical backtest: {config.start_date} to {config.end_date}")
 
-        # Create engine configuration
+        # Create engine configuration with backtest mode enabled
+        # This uses weights that emphasize agents with real historical data:
+        # Momentum (50%), Quality (40%), Fundamentals (5%), Sentiment (5%)
         engine_config = EngineConfig(
             start_date=config.start_date,
             end_date=config.end_date,
@@ -1734,7 +1641,8 @@ async def run_historical_backtest(config: BacktestConfig):
             rebalance_frequency=config.rebalance_frequency,
             top_n_stocks=config.top_n,
             universe=config.universe if config.universe else US_TOP_100_STOCKS,  # Use all 50 stocks
-            transaction_cost=0.001
+            transaction_cost=0.001,
+            backtest_mode=True  # Use backtest-specific weights to minimize look-ahead bias
         )
 
         # Run backtest

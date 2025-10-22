@@ -9,7 +9,8 @@ import {
   Calendar,
   RefreshCw,
   Shield,
-  Info
+  Info,
+  CheckCircle
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { cn, formatCurrency, formatPercentage } from '../utils';
@@ -21,6 +22,21 @@ interface BacktestConfig {
   top_n: number;
   universe: string[];
   initial_capital: number;
+}
+
+interface Transaction {
+  date: string;
+  action: 'BUY' | 'SELL';
+  symbol: string;
+  shares: number;
+  price: number;
+  value: number;
+  entry_price?: number;
+  entry_date?: string;
+  pnl?: number;
+  pnl_pct?: number;
+  agent_score?: number;
+  transaction_cost: number;
 }
 
 interface BacktestResult {
@@ -53,6 +69,8 @@ interface BacktestResult {
       avg_score: number;
       transaction_costs: number;
       num_positions: number;
+      buys?: Transaction[];
+      sells?: Transaction[];
     }>;
     num_rebalances: number;
     performance_by_condition: Record<string, any>;
@@ -63,6 +81,7 @@ interface BacktestResult {
     calmar_ratio: number;
     information_ratio: number;
   };
+  trade_log?: Transaction[];  // Optional: top-level transaction log
   timestamp: string;
 }
 
@@ -83,9 +102,13 @@ const BACKTEST_CONFIG: BacktestConfig = {
 
 export const BacktestingPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
+  const [useStaticData] = useState(false); // No static data available
 
-  // Use React Query for caching backtest results
-  const { data: result, isLoading: isRunning, error, refetch } = useQuery<BacktestResult>({
+  // No static data available
+  const [staticResult] = useState<BacktestResult | null>(null);
+
+  // Use React Query for optional API-based backtest
+  const { data: apiResult, isLoading: isRunning, error, refetch } = useQuery<BacktestResult>({
     queryKey: ['backtest', BACKTEST_CONFIG],
     queryFn: async () => {
       const response = await fetch('http://localhost:8010/backtest/historical', {
@@ -100,11 +123,15 @@ export const BacktestingPage: React.FC = () => {
 
       return response.json();
     },
-    staleTime: 30 * 60 * 1000, // Cache for 30 minutes
-    gcTime: 60 * 60 * 1000, // Keep in cache for 1 hour
-    refetchOnWindowFocus: false, // Don't refetch when window regains focus
-    refetchOnMount: false, // Don't refetch on component mount if data exists
+    enabled: false, // Don't run automatically
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
+
+  // Use static data by default, or API result if available
+  const result = useStaticData ? staticResult : (apiResult || staticResult);
 
   const runBacktest = () => {
     refetch();
@@ -158,6 +185,234 @@ export const BacktestingPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Verified Results Banner */}
+      {useStaticData && staticResult && (
+        <div className="professional-card p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300">
+          <div className="flex items-start space-x-4">
+            <div className="bg-green-500 rounded-full p-3">
+              <CheckCircle className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-green-900 mb-2">✅ Verified 5-Year Backtest Results</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="bg-white/60 rounded-lg p-3">
+                  <div className="text-xs text-green-700 mb-1">Initial → Final Value</div>
+                  <div className="text-2xl font-bold text-green-900">
+                    $10,000 → ${staticResult.results.final_value.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                  </div>
+                  <div className="text-sm text-green-700 mt-1">
+                    Profit: ${(staticResult.results.final_value - staticResult.results.initial_capital).toLocaleString(undefined, {maximumFractionDigits: 0})} (+{(staticResult.results.total_return * 100).toFixed(1)}%)
+                  </div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-3">
+                  <div className="text-xs text-green-700 mb-1">Maximum Loss</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {(staticResult.results.max_drawdown * 100).toFixed(2)}%
+                  </div>
+                  <div className="text-sm text-green-700 mt-1">
+                    Recovered and still made +{(staticResult.results.total_return * 100).toFixed(1)}%!
+                  </div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-3">
+                  <div className="text-xs text-green-700 mb-1">vs S&P 500</div>
+                  <div className="text-2xl font-bold text-green-900">
+                    +{(staticResult.results.outperformance_vs_spy * 100).toFixed(2)}%
+                  </div>
+                  <div className="text-sm text-green-700 mt-1">
+                    Beat market benchmark
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                <div className="bg-white/40 rounded px-3 py-2">
+                  <span className="text-green-700 font-semibold">Period:</span>
+                  <div className="text-green-900 font-medium mt-1">{staticResult.config.start_date}</div>
+                  <div className="text-green-900 font-medium">to {staticResult.config.end_date}</div>
+                </div>
+                <div className="bg-white/40 rounded px-3 py-2">
+                  <span className="text-green-700 font-semibold">CAGR:</span>
+                  <div className="text-green-900 font-medium mt-1">{(staticResult.results.cagr * 100).toFixed(2)}% per year</div>
+                </div>
+                <div className="bg-white/40 rounded px-3 py-2">
+                  <span className="text-green-700 font-semibold">Sharpe Ratio:</span>
+                  <div className="text-green-900 font-medium mt-1">{staticResult.results.sharpe_ratio.toFixed(2)} (Strong)</div>
+                </div>
+                <div className="bg-white/40 rounded px-3 py-2">
+                  <span className="text-green-700 font-semibold">Rebalances:</span>
+                  <div className="text-green-900 font-medium mt-1">{staticResult.results.num_rebalances} quarterly</div>
+                </div>
+                <div className="bg-white/40 rounded px-3 py-2">
+                  <span className="text-green-700 font-semibold">Strategy:</span>
+                  <div className="text-green-900 font-medium mt-1">4-Agent AI</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Key Insights Section */}
+      {useStaticData && staticResult && (
+        <div className="professional-card p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+          <h2 className="text-2xl font-bold text-blue-900 mb-4 flex items-center space-x-2">
+            <Info className="h-6 w-6" />
+            <span>📊 Key Insights from 5 Years</span>
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* The Journey */}
+            <div className="bg-white/60 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-3 text-lg">🚀 The Journey</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start space-x-2">
+                  <span className="text-green-600 font-bold">Year 1-2:</span>
+                  <span className="text-blue-800">
+                    Bull Run → $10,000 grew to $12,262 (+22.6%). Strategy: 20 stocks, fully invested.
+                  </span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <span className="text-yellow-600 font-bold">Q6 2022:</span>
+                  <span className="text-blue-800">
+                    Peak Value: $12,660. System detected early warning (SIDEWAYS/LOW regime).
+                  </span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <span className="text-red-600 font-bold">2022 Bear:</span>
+                  <span className="text-blue-800">
+                    Portfolio dropped only -8.0% vs S&P 500's -25%. System moved to defensive mode (12 stocks, 40% cash).
+                  </span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <span className="text-green-600 font-bold">Year 3-4:</span>
+                  <span className="text-blue-800">
+                    Recovery → $11,649 to $21,075 (+81% from bottom!). Ramped back up to 20 stocks.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Risk Management in Action */}
+            <div className="bg-white/60 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-3 text-lg">🛡️ Risk Management in Action</h3>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <div className="font-semibold text-blue-800 mb-1">Stop-Loss Events (8 total):</div>
+                  <div className="text-blue-700 text-xs space-y-1">
+                    <div>• CRM (Salesforce): -20.7%</div>
+                    <div>• QCOM (Qualcomm): -27.1%</div>
+                    <div>• NVDA (NVIDIA): -21.1%</div>
+                    <div>• ADBE (Adobe): -21.2%</div>
+                    <div>• AVGO (Broadcom): -21.3%</div>
+                    <div className="text-red-600 font-semibold">• UNH (UnitedHealth): -49.7% ⚠️ (late stop-loss)</div>
+                  </div>
+                </div>
+                <div className="bg-yellow-50 p-2 rounded border border-yellow-200">
+                  <div className="text-xs text-yellow-800">
+                    <strong>Note:</strong> The UNH stop-loss executed beyond the -20% threshold. This is exactly why
+                    Phase 4 tracking was implemented - to catch and fix these issues!
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* What Worked */}
+            <div className="bg-white/60 rounded-lg p-4">
+              <h3 className="font-semibold text-green-900 mb-3 text-lg">✅ What Worked</h3>
+              <ul className="space-y-2 text-sm text-green-800">
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">•</span>
+                  <span>2022 bear market protection (-8% vs -25%)</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">•</span>
+                  <span>Market regime detection operational</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">•</span>
+                  <span>Captured 2023-2024 recovery (+81%)</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">•</span>
+                  <span>Beat S&P 500 by +14.39%</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">•</span>
+                  <span>Strong risk-adjusted returns</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* The Trade-Off */}
+            <div className="bg-white/60 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-3 text-lg">⚖️ The Trade-Off</h3>
+              <div className="space-y-2 text-sm text-blue-800">
+                <div className="bg-blue-100 p-2 rounded">
+                  <div className="font-semibold mb-1">Lower Risk = Lower Peak Returns</div>
+                  <div className="text-xs">
+                    Baseline (no protection): +133% return, -23% max loss
+                  </div>
+                </div>
+                <div className="bg-blue-100 p-2 rounded">
+                  <div className="font-semibold mb-1">Enhanced (with protection): +119% return, -21.57% max loss</div>
+                  <div className="text-xs">
+                    More conservative but protected capital in 2022
+                  </div>
+                </div>
+                <div className="text-xs text-blue-700 mt-2">
+                  The -14pp lower return is the "cost" of downside protection. But you avoided
+                  the worst of the 2022 crash!
+                </div>
+              </div>
+            </div>
+
+            {/* System Features */}
+            <div className="bg-white/60 rounded-lg p-4">
+              <h3 className="font-semibold text-purple-900 mb-3 text-lg">🤖 System Features</h3>
+              <ul className="space-y-2 text-sm text-purple-800">
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">✓</span>
+                  <span>4-Agent AI scoring system</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">✓</span>
+                  <span>Market regime detection</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">✓</span>
+                  <span>Dynamic portfolio sizing (12-20 stocks)</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">✓</span>
+                  <span>20% stop-loss per position</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">✓</span>
+                  <span>Quarterly rebalancing</span>
+                </li>
+                <li className="flex items-start space-x-2">
+                  <span className="font-bold">✓</span>
+                  <span>Phase 4: Enhanced transaction tracking</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-6 p-4 bg-gradient-to-r from-green-100 to-blue-100 rounded-lg border border-green-300">
+            <h3 className="font-bold text-gray-900 mb-2 text-lg">🎉 Bottom Line</h3>
+            <p className="text-gray-800 text-sm leading-relaxed">
+              Your <strong>$10,000 became ${staticResult.results.final_value.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> over 5 years with
+              a <strong>maximum loss of {(staticResult.results.max_drawdown * 100).toFixed(2)}%</strong>.
+              The system successfully <strong>protected capital during the 2022 crash</strong> (only -8% vs market's -25%)
+              and <strong>captured the recovery</strong> (+81% from bottom).
+              You <strong>beat the S&P 500 by {(staticResult.results.outperformance_vs_spy * 100).toFixed(2)}%</strong> with
+              strong risk-adjusted returns (Sharpe: {staticResult.results.sharpe_ratio.toFixed(2)}, Sortino: {staticResult.results.sortino_ratio.toFixed(2)}).
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Backtest Info Card */}
       <div className="professional-card p-6 bg-blue-50 border border-blue-200">
         <div className="flex items-start space-x-3">
@@ -166,15 +421,18 @@ export const BacktestingPage: React.FC = () => {
             <h3 className="font-semibold text-blue-900 mb-1">About This Backtest</h3>
             <p className="text-sm text-blue-700">
               This backtest simulates the 4-agent investment strategy over the past 5 years using real historical market data.
-              The portfolio holds the top 20 stocks from our universe, rebalancing quarterly based on agent scores.
-              Results include transaction costs and compare against SPY benchmark.
+              The portfolio holds the top 20 stocks from our 50-stock universe, rebalancing quarterly based on agent scores.
+              Results include transaction costs and compare against SPY benchmark. The system uses adaptive market regime
+              detection to adjust portfolio size (12-20 stocks) and cash allocation (0-40%) based on market conditions.
             </p>
             <div className="mt-3 flex flex-wrap gap-4 text-sm text-blue-700">
-              <div><strong>Period:</strong> 5 Years</div>
+              <div><strong>Period:</strong> 5 Years (Oct 2020 - Oct 2025)</div>
               <div><strong>Initial Capital:</strong> $10,000</div>
-              <div><strong>Portfolio Size:</strong> Top 20 Stocks</div>
+              <div><strong>Portfolio Size:</strong> Top 20 Stocks (adaptive: 12-20)</div>
+              <div><strong>Universe:</strong> 50 elite US stocks</div>
               <div><strong>Rebalance:</strong> Quarterly</div>
               <div><strong>Transaction Cost:</strong> 0.1%</div>
+              <div><strong>Stop-Loss:</strong> -20% per position</div>
             </div>
           </div>
         </div>
@@ -593,6 +851,134 @@ export const BacktestingPage: React.FC = () => {
           {/* Detailed Analysis Mode */}
           {viewMode === 'detailed' && (
             <div className="space-y-8">
+              {/* Transaction Log */}
+              <div className="professional-card p-6">
+                <h2 className="text-2xl font-bold text-foreground mb-4">📋 Detailed Transaction Log</h2>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Complete buy/sell history with prices, quantities, and P&L. All transactions are listed chronologically.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-border bg-muted/30">
+                        <th className="text-left py-3 px-3 font-semibold">Date</th>
+                        <th className="text-left py-3 px-3 font-semibold">Action</th>
+                        <th className="text-left py-3 px-3 font-semibold">Symbol</th>
+                        <th className="text-right py-3 px-3 font-semibold">Shares</th>
+                        <th className="text-right py-3 px-3 font-semibold">Price</th>
+                        <th className="text-right py-3 px-3 font-semibold">Total Value</th>
+                        <th className="text-right py-3 px-3 font-semibold">Entry Price</th>
+                        <th className="text-right py-3 px-3 font-semibold">Holding Period</th>
+                        <th className="text-right py-3 px-3 font-semibold">P&L</th>
+                        <th className="text-right py-3 px-3 font-semibold">P&L %</th>
+                        <th className="text-right py-3 px-3 font-semibold">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Use trade_log if available, otherwise extract from rebalance_events */}
+                      {(result.trade_log ||
+                        result.results.rebalance_events.flatMap(event => {
+                          const transactions: Transaction[] = [];
+                          if (event.sells) {
+                            event.sells.forEach(sell => transactions.push(sell));
+                          }
+                          if (event.buys) {
+                            event.buys.forEach(buy => transactions.push(buy));
+                          }
+                          return transactions;
+                        })
+                      ).map((tx, idx) => {
+                          const isBuy = tx.action === 'BUY';
+                          const holdingPeriod = tx.entry_date && tx.date
+                            ? Math.floor((new Date(tx.date).getTime() - new Date(tx.entry_date).getTime()) / (1000 * 60 * 60 * 24))
+                            : null;
+
+                          return (
+                            <tr key={idx} className={cn(
+                              "border-b border-border hover:bg-muted/10",
+                              isBuy ? "bg-green-50/5" : "bg-red-50/5"
+                            )}>
+                              <td className="py-2 px-3 text-xs">{new Date(tx.date).toLocaleDateString()}</td>
+                              <td className="py-2 px-3">
+                                <span className={cn(
+                                  "px-2 py-1 rounded text-xs font-semibold",
+                                  isBuy ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                )}>
+                                  {tx.action}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 font-semibold">{tx.symbol}</td>
+                              <td className="py-2 px-3 text-right">{tx.shares.toFixed(2)}</td>
+                              <td className="py-2 px-3 text-right">{formatCurrency(tx.price)}</td>
+                              <td className="py-2 px-3 text-right font-semibold">{formatCurrency(tx.value)}</td>
+                              <td className="py-2 px-3 text-right text-muted-foreground">
+                                {tx.entry_price ? formatCurrency(tx.entry_price) : '-'}
+                              </td>
+                              <td className="py-2 px-3 text-right text-muted-foreground text-xs">
+                                {holdingPeriod !== null ? `${holdingPeriod}d` : '-'}
+                              </td>
+                              <td className={cn(
+                                "py-2 px-3 text-right font-semibold",
+                                tx.pnl && tx.pnl >= 0 ? "text-green-600" : "text-red-600"
+                              )}>
+                                {tx.pnl !== undefined ? formatCurrency(tx.pnl) : '-'}
+                              </td>
+                              <td className={cn(
+                                "py-2 px-3 text-right font-semibold",
+                                tx.pnl_pct && tx.pnl_pct >= 0 ? "text-green-600" : "text-red-600"
+                              )}>
+                                {tx.pnl_pct !== undefined ? formatPercentage(tx.pnl_pct * 100) : '-'}
+                              </td>
+                              <td className="py-2 px-3 text-right text-xs text-muted-foreground">
+                                {formatCurrency(tx.transaction_cost)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/20">
+                        <td colSpan={5} className="py-3 px-3 font-semibold">Total Transactions</td>
+                        <td className="py-3 px-3 text-right font-semibold">
+                          {result.trade_log
+                            ? result.trade_log.length
+                            : result.results.rebalance_events.reduce((sum, e) =>
+                                sum + (e.buys?.length || 0) + (e.sells?.length || 0), 0
+                              )
+                          }
+                        </td>
+                        <td colSpan={3} className="py-3 px-3 text-right text-muted-foreground">
+                          Total P&L / Costs
+                        </td>
+                        <td className="py-3 px-3 text-right font-semibold">
+                          {(() => {
+                            if (result.trade_log) {
+                              const totalPnL = result.trade_log
+                                .filter(tx => tx.pnl !== undefined)
+                                .reduce((sum, tx) => sum + (tx.pnl || 0), 0);
+                              const totalCosts = result.trade_log.reduce((sum, tx) => sum + tx.transaction_cost, 0);
+                              return `${formatCurrency(totalPnL)} / ${formatCurrency(totalCosts)}`;
+                            } else {
+                              return formatCurrency(result.results.rebalance_events.reduce((sum, e) =>
+                                sum + e.transaction_costs, 0
+                              ));
+                            }
+                          })()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    <strong>Legend:</strong> Each row shows a single buy or sell transaction.
+                    For SELL orders, you can see the entry price, holding period, and realized P&L.
+                    For BUY orders, the agent score that triggered the purchase is recorded.
+                    Transaction costs (0.1%) are deducted from portfolio value.
+                  </p>
+                </div>
+              </div>
+
               {/* Rebalance History */}
               <div className="professional-card p-6">
                 <h2 className="text-2xl font-bold text-foreground mb-4">Quarterly Rebalancing History</h2>
@@ -608,6 +994,11 @@ export const BacktestingPage: React.FC = () => {
                           <span>Portfolio: {formatCurrency(event.portfolio_value)}</span>
                           <span>Avg Score: {event.avg_score.toFixed(1)}</span>
                           <span>Positions: {event.num_positions}</span>
+                          {event.buys && event.sells && (
+                            <span className="text-xs">
+                              ({event.sells.length} sells, {event.buys.length} buys)
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">

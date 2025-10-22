@@ -175,10 +175,6 @@ class InvestmentNarrativeEngine:
             # Extract key strengths and risks
             strengths, risks = self._extract_strengths_and_risks(agent_results)
 
-            # Determine recommendation
-            recommendation = self._get_recommendation(overall_score)
-            confidence_level = self._get_confidence_level(agent_results)
-
             # Get market regime info if adaptive weights are enabled
             if self.use_adaptive_weights and self.market_regime_service:
                 try:
@@ -186,6 +182,20 @@ class InvestmentNarrativeEngine:
                 except Exception as e:
                     logger.warning(f"Failed to get market regime: {e}")
                     market_regime_info = None
+
+            # Determine recommendation (with regime awareness)
+            regime_trend = market_regime_info.get('trend') if market_regime_info else None
+            recommendation = self._get_recommendation(overall_score, regime_trend)
+            confidence_level = self._get_confidence_level(agent_results)
+
+            # Apply momentum veto if momentum is terrible
+            force_sell_reason = self._should_force_sell(agent_results)
+            if force_sell_reason:
+                logger.warning(f"⚠️  Momentum veto for {symbol}: {force_sell_reason}")
+                recommendation = "SELL"
+
+            # Check for momentum warnings
+            warning = self._check_momentum_warning(agent_results, recommendation)
 
             result = {
                 'symbol': symbol,
@@ -205,6 +215,10 @@ class InvestmentNarrativeEngine:
                 },
                 'weights_used': weights
             }
+
+            # Add warning if present
+            if warning:
+                result['warning'] = warning
 
             # Add market regime info if available
             if market_regime_info:
@@ -600,20 +614,92 @@ Overall Assessment: Based on our quantitative analysis across fundamental, techn
 
         return strengths, risks
 
-    def _get_recommendation(self, overall_score: float) -> str:
-        """Get investment recommendation based on overall score"""
-        if overall_score >= 75:
-            return "STRONG BUY"
-        elif overall_score >= 65:
-            return "BUY"
-        elif overall_score >= 55:
-            return "WEAK BUY"
-        elif overall_score >= 45:
-            return "HOLD"
-        elif overall_score >= 35:
-            return "WEAK SELL"
+    def _get_recommendation(self, overall_score: float, regime_trend: Optional[str] = None) -> str:
+        """
+        Get investment recommendation based on overall score with regime-adjusted thresholds
+
+        IMPROVED SELL DISCIPLINE:
+        - Tightened thresholds by 3-7 points across all levels
+        - More aggressive selling in bear markets
+        - Narrowed HOLD range to reduce indecision
+        """
+        # In bear markets, be MORE aggressive about selling
+        if regime_trend and 'BEAR' in regime_trend:
+            if overall_score >= 72:
+                return "STRONG BUY"
+            elif overall_score >= 62:
+                return "BUY"
+            elif overall_score >= 54:
+                return "WEAK BUY"
+            elif overall_score >= 48:
+                return "HOLD"
+            elif overall_score >= 45:
+                return "WEAK SELL"
+            else:
+                return "SELL"
         else:
-            return "SELL"
+            # Standard thresholds (tightened for better sell discipline)
+            if overall_score >= 70:  # Was 75
+                return "STRONG BUY"
+            elif overall_score >= 60:  # Was 65
+                return "BUY"
+            elif overall_score >= 52:  # Was 55
+                return "WEAK BUY"
+            elif overall_score >= 48:  # Was 45 (narrowed HOLD range)
+                return "HOLD"
+            elif overall_score >= 42:  # Was 35 (raised significantly)
+                return "WEAK SELL"
+            else:
+                return "SELL"
+
+    def _should_force_sell(self, agent_results: Dict) -> Optional[str]:
+        """
+        Momentum veto: Force sell regardless of overall score if momentum is terrible
+
+        Returns:
+            None if no force sell needed, otherwise returns reason string
+        """
+        momentum_score = agent_results.get('momentum', {}).get('score', 50)
+        fundamentals_score = agent_results.get('fundamentals', {}).get('score', 50)
+
+        # Force sell if momentum crashes (strong downtrend)
+        if momentum_score < 35:
+            return f"Strong downtrend (momentum={momentum_score:.0f})"
+
+        # Force sell if both momentum AND fundamentals are weak
+        if momentum_score < 40 and fundamentals_score < 45:
+            return f"Weak momentum ({momentum_score:.0f}) + weak fundamentals ({fundamentals_score:.0f})"
+
+        return None
+
+    def _check_momentum_warning(self, agent_results: Dict, recommendation: str) -> Optional[Dict]:
+        """
+        Check if momentum is weak despite overall recommendation being HOLD/BUY
+
+        Returns:
+            Warning dict if momentum is concerning, None otherwise
+        """
+        momentum_score = agent_results.get('momentum', {}).get('score', 50)
+
+        # Warn if momentum is weak but recommendation is not SELL
+        if momentum_score < 40 and recommendation in ['HOLD', 'WEAK BUY', 'BUY']:
+            return {
+                'type': 'WEAK_MOMENTUM',
+                'message': 'Weak momentum despite other factors - consider selling or reducing position',
+                'severity': 'HIGH' if momentum_score < 30 else 'MEDIUM',
+                'momentum_score': momentum_score
+            }
+
+        # Warn if momentum is moderately weak for strong buy recommendations
+        if momentum_score < 50 and recommendation in ['STRONG BUY', 'BUY']:
+            return {
+                'type': 'MOMENTUM_CONCERN',
+                'message': 'Moderate momentum weakness - monitor closely',
+                'severity': 'LOW',
+                'momentum_score': momentum_score
+            }
+
+        return None
 
     def _get_confidence_level(self, agent_results: Dict) -> str:
         """Calculate confidence level based on agent consensus"""
