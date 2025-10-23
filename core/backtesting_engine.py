@@ -876,10 +876,11 @@ class HistoricalBacktestEngine:
         ANALYTICAL FIX #5: Confidence-Based Position Sizing
         Calculate variable position weights based on conviction level
 
-        Rules:
+        Rules (PHASE 1 IMPROVEMENT - Raised minimum from 45 to 55):
         - High conviction (score>70 & quality>70): Base 6% position
         - Medium conviction (score 55-70): Base 4% position
-        - Low conviction (score 45-55): Base 2% position
+        - Magnificent 7 dip-buy (score 50-55): Base 3% position
+        - Low conviction (score<55): REJECTED - Don't trade weak setups
 
         Weights are normalized to sum to 1.0 for the entire portfolio
 
@@ -902,14 +903,18 @@ class HistoricalBacktestEngine:
                 # High conviction: Both composite and quality are strong
                 base_weight = 0.06  # 6%
                 conviction = "HIGH"
-            elif score > 55:
+            elif score >= 55:
                 # Medium conviction: Good composite score
                 base_weight = 0.04  # 4%
                 conviction = "MED"
+            elif symbol in MAG_7_STOCKS and score >= 50:
+                # PHASE 1 IMPROVEMENT: Magnificent 7 can dip-buy at score >= 50
+                base_weight = 0.03  # 3% for Mag 7 dip-buying
+                conviction = "MAG7_DIP"
             else:
-                # Low conviction: Marginal stocks
-                base_weight = 0.02  # 2%
-                conviction = "LOW"
+                # PHASE 1 IMPROVEMENT: Reject scores < 55 (was allowing down to 45)
+                # Low conviction trades have poor win rate (45%), skip them
+                continue  # Skip this stock, don't add to weights
 
             raw_weights[symbol] = base_weight
             conviction_levels[symbol] = conviction
@@ -921,11 +926,14 @@ class HistoricalBacktestEngine:
         # Log position sizing summary
         high_conviction = sum(1 for c in conviction_levels.values() if c == "HIGH")
         medium_conviction = sum(1 for c in conviction_levels.values() if c == "MED")
+        mag7_dip = sum(1 for c in conviction_levels.values() if c == "MAG7_DIP")
         low_conviction = sum(1 for c in conviction_levels.values() if c == "LOW")
 
         logger.info("📊 POSITION SIZING (Confidence-Based):")
         logger.info(f"   • HIGH conviction ({high_conviction} stocks): {[s for s, c in conviction_levels.items() if c == 'HIGH'][:5]}")
         logger.info(f"   • MEDIUM conviction ({medium_conviction} stocks)")
+        if mag7_dip > 0:
+            logger.info(f"   • MAG7 DIP-BUY ({mag7_dip} stocks): {[s for s, c in conviction_levels.items() if c == 'MAG7_DIP']}")
         logger.info(f"   • LOW conviction ({low_conviction} stocks)")
 
         return normalized_weights
