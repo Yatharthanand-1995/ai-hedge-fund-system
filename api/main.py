@@ -1454,9 +1454,8 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
                 detail="Historical backtesting engine not available. Please ensure core.backtesting_engine is installed."
             )
 
-        # Create engine configuration with backtest mode enabled
-        # This uses weights that emphasize agents with real historical data:
-        # Momentum (50%), Quality (40%), Fundamentals (5%), Sentiment (5%)
+        # Create engine configuration for V2.1 backtest
+        # Uses production weights (40/30/20/10) with adaptive regime detection
         engine_config = EngineConfig(
             start_date=config.start_date,
             end_date=config.end_date,
@@ -1465,7 +1464,10 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
             top_n_stocks=config.top_n,
             universe=config.universe if config.universe else US_TOP_100_STOCKS,
             transaction_cost=0.001,
-            backtest_mode=True  # Use backtest-specific weights to minimize look-ahead bias
+            # V2.1 parameters
+            engine_version="2.1",
+            use_enhanced_provider=True,
+            enable_regime_detection=True  # Enables adaptive weights
         )
 
         # Run real historical backtest with 4-agent analysis
@@ -1492,6 +1494,11 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
                 "sortino_ratio": result.sortino_ratio,
                 "calmar_ratio": result.calmar_ratio
             },
+            # V2.1 metadata
+            "engine_version": result.engine_version,
+            "data_provider": result.data_provider,
+            "data_limitations": result.data_limitations,
+            "estimated_bias_impact": result.estimated_bias_impact,
             "equity_curve": result.equity_curve,
             "rebalance_log": [
                 {
@@ -1504,9 +1511,20 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
             ]
         })
 
+        # Extract detailed transaction log for frontend
+        trade_log = []
+        for event in result.rebalance_events:
+            # Extract buy transactions
+            if 'buys' in event and event['buys']:
+                trade_log.extend(event['buys'])
+            # Extract sell transactions
+            if 'sells' in event and event['sells']:
+                trade_log.extend(event['sells'])
+        
         backtest_result = {
             "config": config.dict(),
             "results": results,
+            "trade_log": trade_log,  # Detailed transaction log for frontend
             "timestamp": datetime.now().isoformat()
         }
 
@@ -1631,18 +1649,21 @@ async def run_historical_backtest(config: BacktestConfig):
     try:
         logger.info(f"Starting historical backtest: {config.start_date} to {config.end_date}")
 
-        # Create engine configuration with backtest mode enabled
-        # This uses weights that emphasize agents with real historical data:
-        # Momentum (50%), Quality (40%), Fundamentals (5%), Sentiment (5%)
+        # Create engine configuration for V2.1 backtesting
+        # Uses production weights (40/30/20/10) with adaptive regime detection
+        # Enhanced provider gives 40+ technical indicators for accurate momentum/quality scoring
         engine_config = EngineConfig(
             start_date=config.start_date,
             end_date=config.end_date,
             initial_capital=config.initial_capital,
             rebalance_frequency=config.rebalance_frequency,
             top_n_stocks=config.top_n,
-            universe=config.universe if config.universe else US_TOP_100_STOCKS,  # Use all 50 stocks
+            universe=config.universe if config.universe else US_TOP_100_STOCKS,
             transaction_cost=0.001,
-            backtest_mode=True  # Use backtest-specific weights to minimize look-ahead bias
+            # V2.1 parameters for production alignment
+            engine_version="2.1",
+            use_enhanced_provider=True,
+            enable_regime_detection=True  # Enable adaptive weights based on market regime
         )
 
         # Run backtest
@@ -1684,8 +1705,15 @@ async def run_historical_backtest(config: BacktestConfig):
                 "win_rate": result.win_rate,
                 "profit_factor": result.profit_factor,
                 "calmar_ratio": result.calmar_ratio,
-                "information_ratio": result.information_ratio
+                "information_ratio": result.information_ratio,
+                # V2.1 metadata for transparency
+                "engine_version": result.engine_version,
+                "data_provider": result.data_provider,
+                "data_limitations": result.data_limitations,
+                "estimated_bias_impact": result.estimated_bias_impact
             },
+            # V2.1: Add detailed transaction log for frontend analysis
+            "trade_log": result.trade_log,
             "timestamp": datetime.now().isoformat()
         }
 
