@@ -63,6 +63,7 @@ def run_backtest_sync():
         volatility_scale_factor=0.75     # Reduce 25% when volatile
     )
 
+    # V2.0: Removed backtest_mode - now always uses live system weights (F:40% M:30% Q:20% S:10%)
     config = BacktestConfig(
         start_date=start_date.strftime('%Y-%m-%d'),
         end_date=end_date.strftime('%Y-%m-%d'),
@@ -70,10 +71,11 @@ def run_backtest_sync():
         rebalance_frequency='quarterly',  # Quarterly as dashboard specifies
         top_n_stocks=20,  # Top 20 stocks as dashboard shows
         universe=DASHBOARD_UNIVERSE,
-        backtest_mode=True,  # Use backtest weights (M:50%, Q:40%, F:5%, S:5%)
         enable_risk_management=True,  # ENABLE RISK MANAGEMENT
         risk_limits=risk_limits,
-        enable_regime_detection=True  # ENABLE MARKET REGIME DETECTION
+        enable_regime_detection=True,  # ENABLE MARKET REGIME DETECTION
+        engine_version="2.0",           # V2.0: EnhancedYahooProvider with 40+ indicators
+        use_enhanced_provider=True      # V2.0: Use full technical indicator suite
     )
 
     print(f"📅 Period: {config.start_date} to {config.end_date}")
@@ -81,7 +83,7 @@ def run_backtest_sync():
     print(f"🔄 Rebalance: {config.rebalance_frequency.upper()}")
     print(f"📊 Portfolio Size: Top {config.top_n_stocks} stocks")
     print(f"🎯 Universe: {len(config.universe)} stocks")
-    print(f"🤖 Real 4-Agent Analysis: {config.backtest_mode}")
+    print(f"🔧 Engine Version: {config.engine_version}")
     print()
     print("🔄 STOCK ROTATION ENABLED:")
     print(f"   • Analyze {len(config.universe)} stocks each quarter")
@@ -89,11 +91,11 @@ def run_backtest_sync():
     print(f"   • Sell stocks that fall out of top {config.top_n_stocks}")
     print(f"   • Buy stocks that enter top {config.top_n_stocks}")
     print()
-    print("⚙️  Agent Weights (Backtest Mode):")
-    print("   • Momentum: 50% (most reliable for historical data)")
-    print("   • Quality: 40% (stable business metrics)")
-    print("   • Fundamentals: 5% (has look-ahead bias)")
-    print("   • Sentiment: 5% (has look-ahead bias)")
+    print("⚙️  Agent Weights (V2.0 - Live System):")
+    print("   • Fundamentals: 40% (financial health, valuation)")
+    print("   • Momentum: 30% (price trends, technical analysis)")
+    print("   • Quality: 20% (business quality, operational efficiency)")
+    print("   • Sentiment: 10% (analyst ratings, market sentiment)")
     print()
     print("🛡️  Risk Management ENABLED:")
     print(f"   • Max Drawdown: {risk_limits.max_portfolio_drawdown*100:.0f}% (→ {risk_limits.cash_buffer_on_drawdown*100:.0f}% cash)")

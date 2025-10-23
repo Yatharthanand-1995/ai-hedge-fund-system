@@ -26,6 +26,8 @@ from data.enhanced_provider import EnhancedYahooProvider
 from core.risk_manager import RiskManager, RiskLimits
 from core.market_regime_detector import MarketRegimeDetector, MarketRegime
 from core.position_tracker import PositionTracker
+from ml.regime_detector import RegimeDetector  # For adaptive weights
+from data.us_top_100_stocks import SECTOR_MAPPING
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +47,13 @@ class BacktestConfig:
     universe: List[str] = field(default_factory=list)
     transaction_cost: float = 0.001  # 0.1% per trade
 
-    # Backtest mode: Use weights that emphasize agents with real historical data
-    # When True: M:50%, Q:40%, F:5%, S:5% (emphasizes historical data)
-    # When False: F:40%, M:30%, Q:20%, S:10% (standard production weights)
-    backtest_mode: bool = True
+    # VERSION 2.1: Enhanced data provider, live system alignment, and adaptive weights
+    engine_version: str = "2.1"
+    use_enhanced_provider: bool = True  # Use EnhancedYahooProvider (40+ indicators)
 
     # Agent weights (must sum to 1.0)
+    # V2.0: Now matches live system weights exactly (40/30/20/10)
+    # V1.x: Used backtest_mode with different weights (50/40/5/5)
     agent_weights: Dict[str, float] = field(default_factory=lambda: {
         'fundamentals': 0.40,
         'momentum': 0.30,
@@ -139,6 +142,20 @@ class BacktestResult:
     calmar_ratio: float
     information_ratio: float
 
+    # Transaction log (detailed buy/sell records for frontend)
+    trade_log: List[Dict] = field(default_factory=list)
+
+    # VERSION 2.1: Metadata and limitations
+    engine_version: str = "2.1"
+    data_provider: str = "EnhancedYahooProvider"  # or "RawYFinance" for v1.x
+    data_limitations: Dict[str, str] = field(default_factory=lambda: {
+        'fundamentals': 'Uses current financial statements (look-ahead bias)',
+        'sentiment': 'Uses current analyst ratings (look-ahead bias)',
+        'momentum': 'Uses historical prices (accurate)',
+        'quality': 'Uses historical prices + current fundamentals (partial look-ahead bias)'
+    })
+    estimated_bias_impact: str = "Results may be optimistic by 5-10% due to look-ahead bias in fundamentals/sentiment"
+
 
 class HistoricalBacktestEngine:
     """
@@ -150,25 +167,24 @@ class HistoricalBacktestEngine:
         self.config = config
         self.data_provider = EnhancedYahooProvider()
 
-        # Apply backtest-specific weights if backtest_mode is enabled
-        if config.backtest_mode:
-            # Backtest weights emphasize agents with real historical data
-            # Momentum (50%) and Quality (40%) use real historical data
-            # Fundamentals (5%) and Sentiment (5%) have look-ahead bias
-            config.agent_weights = {
-                'momentum': 0.50,
-                'quality': 0.40,
-                'fundamentals': 0.05,
-                'sentiment': 0.05
-            }
-            logger.info("🎯 Backtest mode ENABLED: Using historical-data-focused weights (M:50%, Q:40%, F:5%, S:5%)")
+        # VERSION 2.0: Always use live system weights (40/30/20/10)
+        # Removed backtest_mode weight override for consistency with production
+        logger.info(f"🚀 Backtesting Engine v{config.engine_version}")
+        logger.info(f"📊 Agent weights: F:{config.agent_weights['fundamentals']*100:.0f}% "
+                   f"M:{config.agent_weights['momentum']*100:.0f}% "
+                   f"Q:{config.agent_weights['quality']*100:.0f}% "
+                   f"S:{config.agent_weights['sentiment']*100:.0f}%")
+
+        # Data provider selection
+        if config.use_enhanced_provider:
+            logger.info("✨ Using EnhancedYahooProvider (40+ technical indicators)")
         else:
-            logger.info("📊 Standard mode: Using production weights (F:40%, M:30%, Q:20%, S:10%)")
+            logger.info("⚠️  Using raw yfinance (minimal indicators - v1.x compatibility mode)")
 
         # Initialize agents
         self.fundamentals_agent = FundamentalsAgent()
         self.momentum_agent = MomentumAgent()
-        self.quality_agent = QualityAgent()
+        self.quality_agent = QualityAgent(sector_mapping=SECTOR_MAPPING)
         self.sentiment_agent = SentimentAgent()
 
         # Risk management
@@ -180,9 +196,11 @@ class HistoricalBacktestEngine:
 
         # Market regime detection
         self.regime_detector = None
+        self.ml_regime_detector = None  # For adaptive weights
         if config.enable_regime_detection:
             self.regime_detector = MarketRegimeDetector()
-            logger.info("📊 Market regime detection ENABLED")
+            self.ml_regime_detector = RegimeDetector()  # Provides adaptive weights
+            logger.info("📊 Market regime detection ENABLED (with adaptive weights)")
 
         # Position tracking (Phase 4: Enhanced transaction logging)
         self.position_tracker = PositionTracker()
@@ -204,6 +222,20 @@ class HistoricalBacktestEngine:
         """
         logger.info("Starting historical backtest...")
 
+        # VERSION 2.0: Warn about data limitations
+        logger.warning("")
+        logger.warning("=" * 80)
+        logger.warning("⚠️  DATA LIMITATIONS WARNING (v2.0)")
+        logger.warning("=" * 80)
+        logger.warning("Fundamentals Agent: Uses CURRENT financial statements (look-ahead bias)")
+        logger.warning("Sentiment Agent: Uses CURRENT analyst ratings (look-ahead bias)")
+        logger.warning("Momentum Agent: Uses historical prices (accurate)")
+        logger.warning("Quality Agent: Uses historical prices + current fundamentals (partial bias)")
+        logger.warning("")
+        logger.warning("Expected Impact: Results may be optimistic by 5-10% due to look-ahead bias")
+        logger.warning("=" * 80)
+        logger.warning("")
+
         try:
             # Step 1: Download all historical data
             self._download_historical_data()
@@ -219,6 +251,14 @@ class HistoricalBacktestEngine:
             result = self._calculate_results()
 
             logger.info(f"Backtest complete. Total return: {result.total_return:.2%}")
+
+            # VERSION 2.0: Remind about limitations
+            logger.warning("")
+            logger.warning("💡 REMINDER: This backtest includes look-ahead bias in fundamentals/sentiment")
+            logger.warning(f"   Adjust expectations down by 5-10% for more realistic estimates")
+            logger.warning(f"   See result.data_limitations and result.estimated_bias_impact for details")
+            logger.warning("")
+
             return result
 
         except Exception as e:
@@ -320,6 +360,7 @@ class HistoricalBacktestEngine:
             regime = None
             regime_cash_allocation = 1.0  # Default: 100% invested
             target_stock_count = self.config.top_n_stocks  # Default: use config value
+            adaptive_weights = None  # Will be set if regime detection is enabled
 
             if self.regime_detector and 'SPY' in self.historical_prices:
                 try:
@@ -334,8 +375,16 @@ class HistoricalBacktestEngine:
                         target_stock_count = regime.recommended_stock_count
                         regime_cash_allocation = 1.0 - regime.recommended_cash_allocation
 
-                        logger.info(f"📊 REGIME: {regime.trend.value} / {regime.volatility.value} / {regime.condition.value}")
-                        logger.info(f"   → Adaptive: {target_stock_count} stocks, {regime.recommended_cash_allocation*100:.0f}% cash")
+                        # V2.1: Get adaptive weights based on regime
+                        if self.ml_regime_detector:
+                            composite_regime = f"{regime.trend.value}_{regime.volatility.value}"
+                            adaptive_weights = self.ml_regime_detector.get_regime_weights(composite_regime)
+                            logger.info(f"📊 REGIME: {composite_regime}")
+                            logger.info(f"   → Adaptive params: {target_stock_count} stocks, {regime.recommended_cash_allocation*100:.0f}% cash")
+                            logger.info(f"   → Adaptive weights: F:{adaptive_weights['fundamentals']*100:.0f}% M:{adaptive_weights['momentum']*100:.0f}% Q:{adaptive_weights['quality']*100:.0f}% S:{adaptive_weights['sentiment']*100:.0f}%")
+                        else:
+                            logger.info(f"📊 REGIME: {regime.trend.value} / {regime.volatility.value} / {regime.condition.value}")
+                            logger.info(f"   → Adaptive: {target_stock_count} stocks, {regime.recommended_cash_allocation*100:.0f}% cash")
                     else:
                         logger.debug(f"Insufficient data for regime detection on {date}")
                 except Exception as e:
@@ -418,8 +467,8 @@ class HistoricalBacktestEngine:
                 else:
                     logger.info(f"📊 REGIME: Using {cash_allocation*100:.0f}% allocation ({(1-cash_allocation)*100:.0f}% cash)")
 
-            # Score all stocks using point-in-time data
-            stock_scores = self._score_universe_at_date(date)
+            # Score all stocks using point-in-time data (with adaptive weights if regime detection enabled)
+            stock_scores = self._score_universe_at_date(date, adaptive_weights=adaptive_weights)
 
             if not stock_scores:
                 logger.warning(f"No valid scores on {date}, keeping current portfolio")
@@ -881,8 +930,18 @@ class HistoricalBacktestEngine:
 
         return normalized_weights
 
-    def _score_universe_at_date(self, date: str) -> List[Dict]:
-        """Score all stocks using REAL 4-agent analysis with only data available at the given date"""
+    def _score_universe_at_date(self, date: str, adaptive_weights: Optional[Dict[str, float]] = None) -> List[Dict]:
+        """
+        Score all stocks using REAL 4-agent analysis with only data available at the given date
+
+        VERSION 2.1: Uses EnhancedYahooProvider for 40+ technical indicators if enabled
+                     Now supports adaptive weights based on market regime detection
+
+        Args:
+            date: Date to score stocks at
+            adaptive_weights: Optional adaptive weights from regime detection.
+                            If None, uses static config weights (40/30/20/10)
+        """
         scores = []
 
         for symbol in self.config.universe:
@@ -897,11 +956,20 @@ class HistoricalBacktestEngine:
                 if len(point_in_time_data) < 50:  # Need minimum history
                     continue
 
-                # Prepare comprehensive data for agents (using REAL 4-agent analysis)
-                comprehensive_data = self._prepare_comprehensive_data(symbol, point_in_time_data, date)
+                # VERSION 2.0: Prepare comprehensive data using provider if enabled
+                if self.config.use_enhanced_provider:
+                    comprehensive_data = self._prepare_comprehensive_data_v2(symbol, point_in_time_data, date)
+                else:
+                    # V1.x compatibility: Use minimal indicators
+                    comprehensive_data = self._prepare_comprehensive_data_v1(symbol, point_in_time_data, date)
 
                 # Calculate composite score using REAL agents (returns score and agent breakdown)
-                score, agent_scores = self._calculate_real_agent_composite_score(symbol, point_in_time_data, comprehensive_data)
+                score, agent_scores = self._calculate_real_agent_composite_score(
+                    symbol,
+                    point_in_time_data,
+                    comprehensive_data,
+                    adaptive_weights=adaptive_weights
+                )
 
                 scores.append({
                     'symbol': symbol,
@@ -916,10 +984,12 @@ class HistoricalBacktestEngine:
 
         return scores
 
-    def _prepare_comprehensive_data(self, symbol: str, hist_data: pd.DataFrame, date: str) -> Dict:
+    def _prepare_comprehensive_data_v1(self, symbol: str, hist_data: pd.DataFrame, date: str) -> Dict:
         """
-        Prepare comprehensive data structure for agent analysis
+        V1.x: Prepare comprehensive data structure with MINIMAL indicators (RSI, SMA20, SMA50)
         Uses only data available up to the given date (no look-ahead bias)
+
+        NOTE: This is the legacy method. Use _prepare_comprehensive_data_v2() for full 40+ indicators.
         """
         try:
             import talib
@@ -993,10 +1063,107 @@ class HistoricalBacktestEngine:
                 'timestamp': date
             }
 
-    def _calculate_real_agent_composite_score(self, symbol: str, hist_data: pd.DataFrame, comprehensive_data: Dict) -> Tuple[float, Dict[str, float]]:
+    def _prepare_comprehensive_data_v2(self, symbol: str, hist_data: pd.DataFrame, date: str) -> Dict:
+        """
+        VERSION 2.0: Prepare comprehensive data using EnhancedYahooProvider (40+ indicators)
+        Uses only data available up to the given date (no look-ahead bias)
+
+        This leverages the same data provider used by the live system for consistency.
+        """
+        try:
+            # Get comprehensive data from provider (includes 40+ technical indicators)
+            provider_data = self.data_provider.get_comprehensive_data(symbol)
+
+            # CRITICAL: Filter historical data to point-in-time (no look-ahead bias)
+            if 'historical_data' in provider_data and provider_data['historical_data'] is not None:
+                # Replace full historical data with point-in-time filtered data
+                provider_data['historical_data'] = hist_data  # Already filtered in _score_universe_at_date
+
+            # Update timestamp to reflect the backtest date (not current date)
+            provider_data['timestamp'] = date
+
+            # Recalculate technical indicators from point-in-time data
+            # The provider calculates from full data, so we need to recalculate from filtered data
+            if len(hist_data) >= 14:
+                try:
+                    import talib
+                    close = np.asarray(hist_data['Close'].to_numpy(), dtype=np.float64).flatten()
+                    high = np.asarray(hist_data['High'].to_numpy(), dtype=np.float64).flatten()
+                    low = np.asarray(hist_data['Low'].to_numpy(), dtype=np.float64).flatten()
+                    volume = np.asarray(hist_data['Volume'].to_numpy(), dtype=np.float64).flatten()
+
+                    # Recalculate key indicators from point-in-time data
+                    # This ensures no look-ahead bias in technical indicators
+                    if len(close) >= 14:
+                        rsi = talib.RSI(close, timeperiod=14)
+                        if rsi is not None and len(rsi) > 0 and not np.isnan(rsi[-1]):
+                            provider_data['rsi'] = float(rsi[-1])
+
+                    if len(close) >= 20:
+                        sma_20 = talib.SMA(close, timeperiod=20)
+                        if sma_20 is not None and len(sma_20) > 0 and not np.isnan(sma_20[-1]):
+                            provider_data['sma_20'] = float(sma_20[-1])
+
+                    if len(close) >= 50:
+                        sma_50 = talib.SMA(close, timeperiod=50)
+                        if sma_50 is not None and len(sma_50) > 0 and not np.isnan(sma_50[-1]):
+                            provider_data['sma_50'] = float(sma_50[-1])
+
+                    if len(close) >= 26:
+                        macd, signal, hist_macd = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
+                        if macd is not None and not np.isnan(macd[-1]):
+                            provider_data['macd'] = float(macd[-1])
+                            provider_data['macd_signal'] = float(signal[-1]) if not np.isnan(signal[-1]) else 0.0
+
+                    if len(close) >= 20:
+                        upper, middle, lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2)
+                        if upper is not None and not np.isnan(upper[-1]):
+                            provider_data['bb_upper'] = float(upper[-1])
+                            provider_data['bb_middle'] = float(middle[-1])
+                            provider_data['bb_lower'] = float(lower[-1])
+
+                    if len(high) >= 14 and len(low) >= 14 and len(close) >= 14:
+                        atr = talib.ATR(high, low, close, timeperiod=14)
+                        if atr is not None and not np.isnan(atr[-1]):
+                            provider_data['atr'] = float(atr[-1])
+
+                except Exception as e:
+                    logger.debug(f"Failed to recalculate some indicators for {symbol}: {e}")
+
+            # Update current price data from point-in-time
+            if len(hist_data) > 0:
+                provider_data['current_price'] = float(hist_data['Close'].iloc[-1])
+                if len(hist_data) > 1:
+                    provider_data['previous_close'] = float(hist_data['Close'].iloc[-2])
+                    provider_data['price_change'] = provider_data['current_price'] - provider_data['previous_close']
+                    provider_data['price_change_percent'] = (provider_data['price_change'] / provider_data['previous_close'] * 100) if provider_data['previous_close'] != 0 else 0
+
+            logger.debug(f"✅ v2.0: Prepared comprehensive data for {symbol} with {len([k for k in provider_data.keys() if k not in ['symbol', 'timestamp', 'historical_data', 'info', 'financials', 'quarterly_financials']])} indicators")
+
+            return provider_data
+
+        except Exception as e:
+            logger.warning(f"V2 data preparation failed for {symbol}, falling back to v1: {e}")
+            # Fallback to v1 minimal indicators
+            return self._prepare_comprehensive_data_v1(symbol, hist_data, date)
+
+    def _calculate_real_agent_composite_score(
+        self,
+        symbol: str,
+        hist_data: pd.DataFrame,
+        comprehensive_data: Dict,
+        adaptive_weights: Optional[Dict[str, float]] = None
+    ) -> Tuple[float, Dict[str, float]]:
         """
         Calculate composite score using REAL 4-agent analysis
         This replaces the simplified proxy scoring with actual agent analysis
+
+        Args:
+            symbol: Stock symbol
+            hist_data: Historical price data
+            comprehensive_data: Comprehensive market data
+            adaptive_weights: Optional adaptive weights from regime detection.
+                            If None, uses static config weights (40/30/20/10)
 
         Returns:
             Tuple of (composite_score, agent_scores_dict)
@@ -1053,12 +1220,15 @@ class HistoricalBacktestEngine:
                 agent_scores['sentiment'] = 50.0
                 agent_confidences['sentiment'] = 0.2
 
+            # V2.1: Use adaptive weights if regime detection is enabled, otherwise use static config weights
+            weights_to_use = adaptive_weights if adaptive_weights is not None else self.config.agent_weights
+
             # Calculate weighted composite score
             composite_score = (
-                agent_scores['fundamentals'] * self.config.agent_weights['fundamentals'] +
-                agent_scores['momentum'] * self.config.agent_weights['momentum'] +
-                agent_scores['quality'] * self.config.agent_weights['quality'] +
-                agent_scores['sentiment'] * self.config.agent_weights['sentiment']
+                agent_scores['fundamentals'] * weights_to_use['fundamentals'] +
+                agent_scores['momentum'] * weights_to_use['momentum'] +
+                agent_scores['quality'] * weights_to_use['quality'] +
+                agent_scores['sentiment'] * weights_to_use['sentiment']
             )
 
             # Calculate overall confidence
@@ -1308,6 +1478,9 @@ class HistoricalBacktestEngine:
 
         logger.info("=" * 80)
 
+        # Determine data provider used
+        data_provider_name = "EnhancedYahooProvider" if self.config.use_enhanced_provider else "RawYFinance"
+
         return BacktestResult(
             config=self.config,
             start_date=self.config.start_date,
@@ -1333,13 +1506,18 @@ class HistoricalBacktestEngine:
             daily_returns=daily_returns,
             rebalance_events=self.rebalance_events,
             num_rebalances=len(self.rebalance_events),
+            trade_log=self.trade_log,  # V2.1: Add detailed transaction log for frontend
             performance_by_condition=performance_by_condition,
             best_performers=best_performers,
             worst_performers=worst_performers,
             win_rate=win_rate,
             profit_factor=profit_factor,
             calmar_ratio=calmar_ratio,
-            information_ratio=information_ratio
+            information_ratio=information_ratio,
+            # VERSION 2.0: Add metadata
+            engine_version=self.config.engine_version,
+            data_provider=data_provider_name
+            # data_limitations and estimated_bias_impact use defaults from dataclass
         )
 
     def _calculate_spy_returns(self) -> pd.Series:

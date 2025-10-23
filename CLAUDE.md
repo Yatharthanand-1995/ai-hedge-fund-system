@@ -293,6 +293,137 @@ Agent weights are defined in multiple locations and must be updated consistently
 3. Update the returned technical_data dictionary
 4. Agents can then access via `cached_data['technical_data']`
 
+## Backtesting Engine V2.0
+
+The system includes a sophisticated historical backtesting engine in `core/backtesting_engine.py` for validating the 4-agent strategy on historical data.
+
+### Key Features (V2.0)
+
+**Version 2.0 Improvements:**
+- ✅ **EnhancedYahooProvider Integration**: Uses same data provider as live system (40+ technical indicators vs 3 in v1.x)
+- ✅ **Live System Weight Alignment**: Always uses production weights (40/30/20/10) - removed `backtest_mode` override
+- ✅ **Transparent Bias Documentation**: Clear warnings about look-ahead bias in fundamentals/sentiment data
+- ✅ **Backward Compatibility**: Can run in v1.x mode via `use_enhanced_provider=False`
+- ✅ **Comprehensive Testing**: 21 unit tests covering versioning, data accuracy, and weight consistency
+
+**Backtesting Capabilities:**
+- Historical simulation from 2019-present
+- Quarterly/monthly rebalancing
+- SPY benchmark comparison
+- Risk-adjusted metrics (Sharpe, Sortino, Calmar, Information Ratio)
+- Market regime detection integration
+- Position tracking and transaction logging
+- Stop-loss and risk management testing
+
+### Running Backtests
+
+```bash
+# Quick verification test (3 months, 5 stocks)
+python3 verify_v2_integration.py
+
+# Compare V1.x vs V2.0 (6 months, Magnificent 7)
+python3 compare_backtest_versions.py
+
+# Full 5-year backtest with risk management
+python3 run_analytical_fixes_backtest.py
+
+# Unit tests
+python3 -m pytest tests/test_backtesting_v2.py -v
+```
+
+### Using the Backtesting Engine
+
+```python
+from datetime import datetime, timedelta
+from core.backtesting_engine import HistoricalBacktestEngine, BacktestConfig
+
+# V2.0 Configuration
+config = BacktestConfig(
+    start_date='2020-01-01',
+    end_date='2024-12-31',
+    initial_capital=10000.0,
+    rebalance_frequency='quarterly',  # or 'monthly'
+    top_n_stocks=20,
+    universe=['AAPL', 'MSFT', ...],  # Your stock universe
+
+    # V2.0 features
+    engine_version="2.0",              # Default
+    use_enhanced_provider=True,        # Use 40+ indicators (default)
+
+    # Optional: Risk management
+    enable_risk_management=True,       # Stop-losses, drawdown protection
+    enable_regime_detection=True,      # Adaptive weights based on market regime
+)
+
+# Run backtest
+engine = HistoricalBacktestEngine(config)
+result = engine.run_backtest()
+
+# Access results
+print(f"Total Return: {result.total_return*100:.2f}%")
+print(f"CAGR: {result.cagr*100:.2f}%")
+print(f"Sharpe Ratio: {result.sharpe_ratio:.2f}")
+print(f"Max Drawdown: {result.max_drawdown*100:.2f}%")
+print(f"vs SPY: {result.outperformance_vs_spy*100:+.2f}%")
+
+# V2.0 metadata
+print(f"Engine Version: {result.engine_version}")
+print(f"Data Provider: {result.data_provider}")
+print(f"Estimated Bias: {result.estimated_bias_impact}")
+```
+
+### Data Limitations (IMPORTANT)
+
+**Look-Ahead Bias Warning:**
+
+The backtesting engine has **known look-ahead bias** in two agents:
+
+1. **Fundamentals Agent**: Uses CURRENT financial statements (not historical)
+   - Real-world: Q4 2023 financials available in Feb 2024
+   - Backtest: Uses 2024 financials for all of 2023 decisions
+
+2. **Sentiment Agent**: Uses CURRENT analyst ratings (not historical)
+   - Real-world: Analyst ratings change over time
+   - Backtest: Uses current ratings for historical decisions
+
+**Impact**: Results may be **optimistic by 5-10%** due to this bias.
+
+**Mitigation**:
+- Use backtests for **relative performance** comparison (strategy A vs B)
+- Discount absolute returns by 5-10% for realistic estimates
+- Focus on **risk-adjusted metrics** (Sharpe, Sortino) which are less biased
+- V2.0 clearly documents limitations in `result.data_limitations`
+
+**Accurate Data** (No Look-Ahead Bias):
+- Momentum Agent: Uses historical prices only ✅
+- Quality Agent: Partial bias (uses historical prices + current fundamentals)
+- Point-in-time filtering for all technical indicators ✅
+
+### V1.x Compatibility Mode
+
+For comparison with legacy backtests:
+
+```python
+config = BacktestConfig(
+    # ... other params ...
+    engine_version="1.0",
+    use_enhanced_provider=False  # Only RSI, SMA20, SMA50
+)
+```
+
+### Migration from V1.x
+
+See `docs/BACKTEST_V2_MIGRATION.md` for detailed migration guide.
+
+**Key Changes:**
+- Removed `backtest_mode` parameter (weights always match live system)
+- Added `use_enhanced_provider` flag (default: True)
+- Added version metadata to results
+- Enhanced provider gives 40+ indicators vs 3 in v1.x
+
+**Breaking Changes:**
+- None - V1.x configs still work via `use_enhanced_provider=False`
+
 ## Troubleshooting
 
 ### Port Already in Use

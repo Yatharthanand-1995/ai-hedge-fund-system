@@ -51,6 +51,7 @@ def run_analytical_fixes_backtest():
         volatility_scale_factor=0.5      # Reduce 50% when vol > threshold
     )
 
+    # V2.0: Removed backtest_mode - now always uses live system weights (F:40% M:30% Q:20% S:10%)
     config = BacktestConfig(
         start_date=start_date.strftime('%Y-%m-%d'),
         end_date=end_date.strftime('%Y-%m-%d'),
@@ -58,10 +59,11 @@ def run_analytical_fixes_backtest():
         rebalance_frequency='quarterly',
         top_n_stocks=20,
         universe=US_TOP_100_STOCKS,  # 50-stock universe
-        backtest_mode=True,
         enable_risk_management=True,   # Enable analytical stop-losses
         enable_regime_detection=False,  # Disable for clean comparison
-        risk_limits=risk_limits
+        risk_limits=risk_limits,
+        engine_version="2.0",           # V2.0: EnhancedYahooProvider with 40+ indicators
+        use_enhanced_provider=True      # V2.0: Use full technical indicator suite
     )
 
     print(f"📅 Period: {config.start_date} to {config.end_date}")
