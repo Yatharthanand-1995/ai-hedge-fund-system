@@ -97,7 +97,7 @@ class RiskManager:
 
         return result
 
-    def check_position_stop_loss(self, positions: List[Dict]) -> List[Dict]:
+    def check_position_stop_loss(self, positions: List[Dict], historical_volatility: Dict[str, float] = None) -> List[Dict]:
         """
         Check which positions exceed stop-loss limits.
 
@@ -106,14 +106,20 @@ class RiskManager:
         - Medium quality (Q 50-70): 20% stop
         - Low quality (Q<50): 10% stop (tight control)
 
-        ANALYTICAL FIX #4: Trailing Stops
-        - Track highest price while held
-        - Exit on -20% drop from PEAK, not entry
-        - Protects profits, lets winners run
+        TIER 1 FIX: Hybrid Stop-Loss (Fixed + Trailing)
+        - Fixed stop from entry: Protects from large losses
+        - Trailing stop from peak: Protects profits on winners
+        - Uses whichever triggers first (more protective)
+
+        TIER 1 FIX: Volatility Buffer
+        - High volatility stocks (60-day vol > 35%) get wider stops
+        - Reduces false positives from normal volatility spikes
+        - Prevents premature exits that recover quickly
 
         Args:
             positions: List of dicts with keys: symbol, entry_price, current_price, shares,
-                      quality_score (optional), highest_price (optional)
+                      quality_score (optional), highest_price (optional), historical_data (optional)
+            historical_volatility: Optional dict of {symbol: 60day_volatility} for volatility buffer
 
         Returns:
             List of positions to close due to stop-loss
@@ -128,28 +134,62 @@ class RiskManager:
             highest_price = position.get('highest_price', entry_price)  # ANALYTICAL FIX #4
 
             if entry_price > 0:
-                # ANALYTICAL FIX #1: Determine stop-loss based on quality
+                # ANALYTICAL FIX #1: Determine base stop-loss from quality
                 if quality_score > 70:
-                    stop_threshold = 0.30  # High quality: 30% stop
+                    base_stop_threshold = 0.30  # High quality: 30% stop
                     quality_tier = "HIGH"
                 elif quality_score >= 50:  # ✅ FIXED: Now includes 50.0 defaults
-                    stop_threshold = 0.20  # Medium quality: 20% stop
+                    base_stop_threshold = 0.20  # Medium quality: 20% stop
                     quality_tier = "MED"
                 else:
-                    stop_threshold = 0.10  # Low quality: 10% stop
+                    base_stop_threshold = 0.10  # Low quality: 10% stop
                     quality_tier = "LOW"
+                
+                # TIER 1 FIX: Volatility buffer for high-volatility stocks
+                # Reduces false positives (30.8% of stops recover within 30 days)
+                volatility = None
+                volatility_adjustment = 1.0
+                
+                if historical_volatility and symbol in historical_volatility:
+                    volatility = historical_volatility[symbol]
+                    
+                    if volatility > 0.35:  # High volatility (>35% annualized)
+                        # Widen stops by 20% to account for normal volatility
+                        volatility_adjustment = 1.2
+                        logger.info(f"📊 VOLATILITY BUFFER: {symbol} vol={volatility*100:.1f}% → stop widened to {base_stop_threshold*volatility_adjustment*100:.0f}%")
+                
+                # Apply volatility adjustment
+                stop_threshold = base_stop_threshold * volatility_adjustment
 
-                # ANALYTICAL FIX #4: Use trailing stop (from peak) instead of fixed stop (from entry)
+                # TIER 1 FIX: Hybrid stop-loss (fixed + trailing)
+                # Use TIGHTER of fixed stop (from entry) or trailing stop (from peak)
+                # This prevents late exits while still letting winners run
+                
                 # Update highest price if current is higher
                 if current_price > highest_price:
                     highest_price = current_price
 
-                # Check drop from PEAK (not entry)
+                # Calculate both stop types
                 drop_from_peak = (current_price - highest_price) / highest_price
                 drop_from_entry = (current_price - entry_price) / entry_price
 
-                # Trigger if drops > threshold from peak
-                if drop_from_peak < -stop_threshold:
+                # HYBRID LOGIC: Use whichever triggers first (more protective)
+                # Fixed stop: Protects from large losses from entry
+                # Trailing stop: Protects profits once position runs up
+                stop_triggered = False
+                stop_reason = ""
+                
+                if drop_from_entry < -stop_threshold:
+                    # Fixed stop from entry hit (downside protection)
+                    stop_triggered = True
+                    stop_reason = "FIXED_STOP"
+                elif drop_from_peak < -(stop_threshold + 0.05):
+                    # Trailing stop from peak hit (let winners run a bit more)
+                    # Use wider threshold (+5%) to avoid premature exits on winners
+                    stop_triggered = True
+                    stop_reason = "TRAILING_STOP"
+                
+                if stop_triggered:
                     positions_to_close.append({
                         'symbol': symbol,
                         'entry_price': entry_price,
@@ -159,13 +199,19 @@ class RiskManager:
                         'quality_tier': quality_tier,
                         'stop_threshold': stop_threshold,
                         'loss_pct': drop_from_entry,  # Total P&L from entry
-                        'drop_from_peak': drop_from_peak,  # What triggered the stop
-                        'reason': f'STOP_LOSS (Q={quality_tier}, -{stop_threshold*100:.0f}% stop, peak→current: {drop_from_peak*100:.1f}%)'
+                        'drop_from_peak': drop_from_peak,  # Peak drawdown
+                        'stop_type': stop_reason,  # Which stop triggered
+                        'reason': f'{stop_reason} (Q={quality_tier}, -{stop_threshold*100:.0f}% stop, entry→current: {drop_from_entry*100:.1f}%, peak→current: {drop_from_peak*100:.1f}%)'
                     })
+                    
+                    # Debug logging for quality score tracking
+                    logger.info(f"🔍 STOP DEBUG: {symbol} Q={quality_score:.1f} → tier={quality_tier} → stop={stop_threshold*100:.0f}%")
+                    
                     logger.warning(
-                        f"🛑 Stop-loss triggered for {symbol} (Quality={quality_tier}): "
-                        f"Peak ${highest_price:.2f} → ${current_price:.2f} "
-                        f"({drop_from_peak*100:.1f}%, threshold: -{stop_threshold*100:.0f}%)"
+                        f"🛑 {stop_reason} triggered for {symbol} (Quality={quality_tier}, Q={quality_score:.1f}): "
+                        f"Entry ${entry_price:.2f} → Peak ${highest_price:.2f} → Current ${current_price:.2f} | "
+                        f"Entry loss: {drop_from_entry*100:.1f}%, Peak drop: {drop_from_peak*100:.1f}%, "
+                        f"Threshold: -{stop_threshold*100:.0f}%"
                     )
 
         return positions_to_close

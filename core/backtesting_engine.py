@@ -411,7 +411,20 @@ class HistoricalBacktestEngine:
                     'highest_price': pos.highest_price   # ANALYTICAL FIX #4
                 } for pos in self.portfolio if self._get_price(pos.symbol, date) is not None]
 
-                stop_losses = self.risk_manager.check_position_stop_loss(position_data)
+                # TIER 1 FIX: Calculate historical volatility for volatility buffer
+                historical_volatility = {}
+                for pos in self.portfolio:
+                    if pos.symbol in self.historical_prices:
+                        hist_data = self.historical_prices[pos.symbol]
+                        point_in_time = hist_data[hist_data.index <= date]
+                        if len(point_in_time) >= 60:
+                            # Calculate 60-day annualized volatility
+                            returns = point_in_time['Close'].pct_change().dropna()
+                            if len(returns) >= 60:
+                                vol_60d = returns.tail(60).std() * (252 ** 0.5)  # Annualize
+                                historical_volatility[pos.symbol] = vol_60d
+
+                stop_losses = self.risk_manager.check_position_stop_loss(position_data, historical_volatility)
 
                 # Sell positions that hit stop-loss
                 for stop_loss_item in stop_losses:
@@ -876,11 +889,10 @@ class HistoricalBacktestEngine:
         ANALYTICAL FIX #5: Confidence-Based Position Sizing
         Calculate variable position weights based on conviction level
 
-        Rules (PHASE 1 IMPROVEMENT - Raised minimum from 45 to 55):
+        Rules:
         - High conviction (score>70 & quality>70): Base 6% position
         - Medium conviction (score 55-70): Base 4% position
-        - Magnificent 7 dip-buy (score 50-55): Base 3% position
-        - Low conviction (score<55): REJECTED - Don't trade weak setups
+        - Low conviction (score 45-55): Base 2% position
 
         Weights are normalized to sum to 1.0 for the entire portfolio
 
@@ -903,18 +915,14 @@ class HistoricalBacktestEngine:
                 # High conviction: Both composite and quality are strong
                 base_weight = 0.06  # 6%
                 conviction = "HIGH"
-            elif score >= 55:
+            elif score > 55:
                 # Medium conviction: Good composite score
                 base_weight = 0.04  # 4%
                 conviction = "MED"
-            elif symbol in MAG_7_STOCKS and score >= 50:
-                # PHASE 1 IMPROVEMENT: Magnificent 7 can dip-buy at score >= 50
-                base_weight = 0.03  # 3% for Mag 7 dip-buying
-                conviction = "MAG7_DIP"
             else:
-                # PHASE 1 IMPROVEMENT: Reject scores < 55 (was allowing down to 45)
-                # Low conviction trades have poor win rate (45%), skip them
-                continue  # Skip this stock, don't add to weights
+                # Low conviction: Marginal stocks
+                base_weight = 0.02  # 2%
+                conviction = "LOW"
 
             raw_weights[symbol] = base_weight
             conviction_levels[symbol] = conviction
@@ -926,14 +934,11 @@ class HistoricalBacktestEngine:
         # Log position sizing summary
         high_conviction = sum(1 for c in conviction_levels.values() if c == "HIGH")
         medium_conviction = sum(1 for c in conviction_levels.values() if c == "MED")
-        mag7_dip = sum(1 for c in conviction_levels.values() if c == "MAG7_DIP")
         low_conviction = sum(1 for c in conviction_levels.values() if c == "LOW")
 
         logger.info("📊 POSITION SIZING (Confidence-Based):")
         logger.info(f"   • HIGH conviction ({high_conviction} stocks): {[s for s, c in conviction_levels.items() if c == 'HIGH'][:5]}")
         logger.info(f"   • MEDIUM conviction ({medium_conviction} stocks)")
-        if mag7_dip > 0:
-            logger.info(f"   • MAG7 DIP-BUY ({mag7_dip} stocks): {[s for s, c in conviction_levels.items() if c == 'MAG7_DIP']}")
         logger.info(f"   • LOW conviction ({low_conviction} stocks)")
 
         return normalized_weights
