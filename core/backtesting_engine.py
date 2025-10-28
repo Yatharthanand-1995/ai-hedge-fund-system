@@ -411,22 +411,7 @@ class HistoricalBacktestEngine:
                     'highest_price': pos.highest_price   # ANALYTICAL FIX #4
                 } for pos in self.portfolio if self._get_price(pos.symbol, date) is not None]
 
-                # TIER 1 FIX: Calculate historical volatility for volatility buffer
-                historical_volatility = {}
-                for pos in self.portfolio:
-                    if pos.symbol in self.historical_prices:
-                        hist_data = self.historical_prices[pos.symbol]
-                        # Convert date string to datetime for proper comparison
-                        date_dt = pd.to_datetime(date)
-                        point_in_time = hist_data[hist_data.index <= date_dt]
-                        if len(point_in_time) >= 60:
-                            # Calculate 60-day annualized volatility
-                            returns = point_in_time['Close'].pct_change().dropna()
-                            if len(returns) >= 60:
-                                vol_60d = float(returns.tail(60).std() * (252 ** 0.5))  # Annualize
-                                historical_volatility[pos.symbol] = vol_60d
-
-                stop_losses = self.risk_manager.check_position_stop_loss(position_data, historical_volatility)
+                stop_losses = self.risk_manager.check_position_stop_loss(position_data)
 
                 # Sell positions that hit stop-loss
                 for stop_loss_item in stop_losses:
@@ -1471,18 +1456,10 @@ class HistoricalBacktestEngine:
         logger.info("📊 TRANSACTION TRACKING STATISTICS (Phase 4)")
         logger.info("=" * 80)
         logger.info(f"   Total exits: {tracking_stats['total_exits']}")
-        
-        # Avoid division by zero if no exits occurred
-        if tracking_stats['total_exits'] > 0:
-            logger.info(f"   • Stop-loss exits: {tracking_stats['stop_loss_exits']} ({tracking_stats['stop_loss_exits']/tracking_stats['total_exits']*100:.1f}%)")
-            logger.info(f"   • Regime reduction exits: {tracking_stats['regime_reduction_exits']} ({tracking_stats['regime_reduction_exits']/tracking_stats['total_exits']*100:.1f}%)")
-            logger.info(f"   • Score dropped exits: {tracking_stats['score_dropped_exits']} ({tracking_stats['score_dropped_exits']/tracking_stats['total_exits']*100:.1f}%)")
-            logger.info(f"   • Normal rebalance exits: {tracking_stats['normal_rebalance_exits']} ({tracking_stats['normal_rebalance_exits']/tracking_stats['total_exits']*100:.1f}%)")
-        else:
-            logger.info(f"   • Stop-loss exits: {tracking_stats['stop_loss_exits']}")
-            logger.info(f"   • Regime reduction exits: {tracking_stats['regime_reduction_exits']}")
-            logger.info(f"   • Score dropped exits: {tracking_stats['score_dropped_exits']}")
-            logger.info(f"   • Normal rebalance exits: {tracking_stats['normal_rebalance_exits']}")
+        logger.info(f"   • Stop-loss exits: {tracking_stats['stop_loss_exits']} ({tracking_stats['stop_loss_exits']/tracking_stats['total_exits']*100:.1f}%)")
+        logger.info(f"   • Regime reduction exits: {tracking_stats['regime_reduction_exits']} ({tracking_stats['regime_reduction_exits']/tracking_stats['total_exits']*100:.1f}%)")
+        logger.info(f"   • Score dropped exits: {tracking_stats['score_dropped_exits']} ({tracking_stats['score_dropped_exits']/tracking_stats['total_exits']*100:.1f}%)")
+        logger.info(f"   • Normal rebalance exits: {tracking_stats['normal_rebalance_exits']} ({tracking_stats['normal_rebalance_exits']/tracking_stats['total_exits']*100:.1f}%)")
         logger.info("")
         logger.info("🔄 RECOVERY TRACKING:")
         recovery = tracking_stats['recovery_tracking']
