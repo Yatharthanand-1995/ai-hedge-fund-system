@@ -11,6 +11,7 @@ from typing import List, Dict, Optional
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import yfinance as yf
 from datetime import datetime, timedelta
 import sys
@@ -70,10 +71,30 @@ from core.parallel_executor import ParallelAgentExecutor
 from data.enhanced_provider import EnhancedYahooProvider
 from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
 
-# Configure logging
+# Configure logging with rotation
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Create logs directory if it doesn't exist
+os.makedirs('logs/api', exist_ok=True)
+
+# Rotating file handler (10MB max, 5 backups)
+file_handler = RotatingFileHandler(
+    'logs/api/api.log',
+    maxBytes=10*1024*1024,  # 10 MB
+    backupCount=5
+)
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+# Configure root logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    handlers=[file_handler, console_handler]
 )
 logger = logging.getLogger(__name__)
 
