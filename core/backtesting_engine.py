@@ -916,7 +916,13 @@ class HistoricalBacktestEngine:
 
         # Normalize weights to sum to 1.0
         total_weight = sum(raw_weights.values())
-        normalized_weights = {symbol: weight / total_weight for symbol, weight in raw_weights.items()}
+        if total_weight > 0:
+            normalized_weights = {symbol: weight / total_weight for symbol, weight in raw_weights.items()}
+        else:
+            # Equal weights fallback if all scores are zero
+            equal_weight = 1.0 / len(raw_weights) if len(raw_weights) > 0 else 0
+            normalized_weights = {symbol: equal_weight for symbol in raw_weights.keys()}
+            logger.warning(f"⚠️  All stocks have zero weight, using equal weights: {equal_weight:.4f}")
 
         # Log position sizing summary
         high_conviction = sum(1 for c in conviction_levels.values() if c == "HIGH")
@@ -1283,8 +1289,12 @@ class HistoricalBacktestEngine:
         if 'Volume' in hist_data.columns and len(hist_data) >= 20:
             avg_volume = float(hist_data['Volume'].rolling(20).mean().iloc[-1])
             recent_volume = float(hist_data['Volume'].iloc[-1])
-            volume_score = 50 + (recent_volume / avg_volume - 1) * 50
-            volume_score = min(100, max(0, volume_score))
+            # Safe division for volume score
+            if avg_volume > 0:
+                volume_score = 50 + (recent_volume / avg_volume - 1) * 50
+                volume_score = min(100, max(0, volume_score))
+            else:
+                volume_score = 50  # Neutral score if avg_volume is zero
             scores.append(volume_score * 0.1)
 
         # Default score components
@@ -1353,28 +1363,41 @@ class HistoricalBacktestEngine:
         # Basic metrics
         initial_value = self.config.initial_capital
         final_value = values[-1]
-        total_return = (final_value - initial_value) / initial_value
+        total_return = (final_value - initial_value) / initial_value if initial_value > 0 else 0
 
         # Time-based metrics
         start = pd.to_datetime(self.config.start_date)
         end = pd.to_datetime(self.config.end_date)
         years = (end - start).days / 365.25
 
-        cagr = (final_value / initial_value) ** (1 / years) - 1 if years > 0 else 0
+        # CAGR calculation with full protection
+        if years > 0 and initial_value > 0:
+            cagr = (final_value / initial_value) ** (1 / years) - 1
+        else:
+            cagr = 0
 
         # Risk metrics
         volatility = returns.std() * np.sqrt(252)  # Annualized
-        sharpe_ratio = (cagr - 0.02) / volatility if volatility > 0 else 0  # Assuming 2% risk-free rate
+        # Sharpe ratio with NaN protection
+        if volatility > 0 and not np.isnan(volatility) and not np.isinf(volatility):
+            sharpe_ratio = (cagr - 0.02) / volatility
+        else:
+            sharpe_ratio = 0
 
         # Downside deviation for Sortino
         downside_returns = returns[returns < 0]
         downside_dev = downside_returns.std() * np.sqrt(252)
-        sortino_ratio = (cagr - 0.02) / downside_dev if downside_dev > 0 else 0
+        # Sortino ratio with NaN protection
+        if downside_dev > 0 and not np.isnan(downside_dev) and not np.isinf(downside_dev):
+            sortino_ratio = (cagr - 0.02) / downside_dev
+        else:
+            sortino_ratio = 0
 
-        # Drawdown analysis
+        # Drawdown analysis with zero protection
         cum_returns = (1 + returns).cumprod()
         running_max = cum_returns.expanding().max()
-        drawdown = (cum_returns - running_max) / running_max
+        # Safe division using numpy.where to avoid division by zero
+        drawdown = np.where(running_max != 0, (cum_returns - running_max) / running_max, 0)
         max_drawdown = drawdown.min()
 
         # Drawdown duration
@@ -1409,7 +1432,9 @@ class HistoricalBacktestEngine:
                 spy_variance = np.var(spy_ret)
                 beta = covariance / spy_variance if spy_variance > 0 else 1.0
 
-                alpha = cagr - (0.02 + beta * (spy_total_return / years - 0.02))
+                # Alpha calculation with safe division
+                spy_annual_return = (spy_total_return / years) if years > 0 else 0
+                alpha = cagr - (0.02 + beta * (spy_annual_return - 0.02))
             else:
                 beta = 1.0
                 alpha = 0.0
@@ -1456,10 +1481,13 @@ class HistoricalBacktestEngine:
         logger.info("📊 TRANSACTION TRACKING STATISTICS (Phase 4)")
         logger.info("=" * 80)
         logger.info(f"   Total exits: {tracking_stats['total_exits']}")
-        logger.info(f"   • Stop-loss exits: {tracking_stats['stop_loss_exits']} ({tracking_stats['stop_loss_exits']/tracking_stats['total_exits']*100:.1f}%)")
-        logger.info(f"   • Regime reduction exits: {tracking_stats['regime_reduction_exits']} ({tracking_stats['regime_reduction_exits']/tracking_stats['total_exits']*100:.1f}%)")
-        logger.info(f"   • Score dropped exits: {tracking_stats['score_dropped_exits']} ({tracking_stats['score_dropped_exits']/tracking_stats['total_exits']*100:.1f}%)")
-        logger.info(f"   • Normal rebalance exits: {tracking_stats['normal_rebalance_exits']} ({tracking_stats['normal_rebalance_exits']/tracking_stats['total_exits']*100:.1f}%)")
+        if tracking_stats['total_exits'] > 0:
+            logger.info(f"   • Stop-loss exits: {tracking_stats['stop_loss_exits']} ({tracking_stats['stop_loss_exits']/tracking_stats['total_exits']*100:.1f}%)")
+            logger.info(f"   • Regime reduction exits: {tracking_stats['regime_reduction_exits']} ({tracking_stats['regime_reduction_exits']/tracking_stats['total_exits']*100:.1f}%)")
+            logger.info(f"   • Score dropped exits: {tracking_stats['score_dropped_exits']} ({tracking_stats['score_dropped_exits']/tracking_stats['total_exits']*100:.1f}%)")
+            logger.info(f"   • Normal rebalance exits: {tracking_stats['normal_rebalance_exits']} ({tracking_stats['normal_rebalance_exits']/tracking_stats['total_exits']*100:.1f}%)")
+        else:
+            logger.info("   No exits during backtest period (buy and hold)")
         logger.info("")
         logger.info("🔄 RECOVERY TRACKING:")
         recovery = tracking_stats['recovery_tracking']
@@ -1501,7 +1529,7 @@ class HistoricalBacktestEngine:
             equity_curve=[{
                 'date': point['date'],
                 'value': point['value'],
-                'return': (point['value'] - initial_value) / initial_value
+                'return': (point['value'] - initial_value) / initial_value if initial_value > 0 else 0
             } for point in self.equity_curve],
             daily_returns=daily_returns,
             rebalance_events=self.rebalance_events,

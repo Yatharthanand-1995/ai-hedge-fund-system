@@ -5,6 +5,35 @@ All notable changes to the AI Hedge Fund System will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-10-31
+
+### Fixed
+- **CRITICAL: Division by Zero Errors in Backtesting**: Fixed 9 division by zero vulnerabilities in `core/backtesting_engine.py`
+  - ✅ Logging statistics with zero exits (lines 1459-1465) - **Most likely cause of failures**
+  - ✅ Weight normalization when all scores are zero (lines 919-925)
+  - ✅ Total return calculations (lines 1362 & 1532)
+  - ✅ CAGR calculation with full protection (lines 1370-1373)
+  - ✅ Drawdown vector division using np.where (line 1396)
+  - ✅ Alpha calculation safe division (lines 1432-1433)
+  - ✅ Sharpe ratio with NaN protection (lines 1378-1381)
+  - ✅ Sortino ratio with NaN protection (lines 1387-1390)
+  - ✅ Volume score safe division (lines 1293-1297)
+
+### Added
+- **test_backtest_fix.py**: Comprehensive test script for division by zero fixes
+- **BACKTEST_BUGFIX_SUMMARY.md**: Complete documentation of all fixes with examples and testing results
+
+### Testing
+- ✅ Quick 3-month backtest: 17.17% return, Sharpe 5.86, no errors
+- ✅ All edge cases handled (zero exits, zero volatility, buy-and-hold scenarios)
+- ✅ Frontend displays results correctly with transaction log
+
+### Impact
+- **Before**: Backtests failed with "division by zero" error, especially on short periods (< 6 months) or buy-and-hold scenarios
+- **After**: All backtests complete successfully with proper fallback values for edge cases
+
+---
+
 ## [2.1.0] - 2025-10-30
 
 ### Added
