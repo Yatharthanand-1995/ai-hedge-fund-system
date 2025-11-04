@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Bell,
-  Clock,
   TrendingUp,
   TrendingDown,
   Target,
@@ -81,8 +80,11 @@ export const ActionableInsightsPanel: React.FC<ActionableInsightsPanelProps> = (
         const realActions: ActionItem[] = [];
         const realAlerts: Alert[] = [];
 
-        topPicks.forEach((pick: any, index: number) => {
-          const { symbol, overall_score, recommendation, market_data } = pick;
+        topPicks.forEach((pick: Record<string, unknown>, index: number) => {
+          const symbol = pick.symbol as string;
+          const overall_score = pick.overall_score as number;
+          const recommendation = pick.recommendation as string;
+          const market_data = pick.market_data as Record<string, number>;
 
           // Generate actions based on real data
           if (overall_score > 75 && recommendation.includes('BUY')) {
@@ -150,8 +152,9 @@ export const ActionableInsightsPanel: React.FC<ActionableInsightsPanelProps> = (
 
         // Calculate sector allocation insights
         const sectorCounts: Record<string, number> = {};
-        topPicks.forEach((pick: any) => {
-          sectorCounts[pick.sector] = (sectorCounts[pick.sector] || 0) + 1;
+        topPicks.forEach((pick: Record<string, unknown>) => {
+          const sector = pick.sector as string;
+          sectorCounts[sector] = (sectorCounts[sector] || 0) + 1;
         });
 
         const dominantSector = Object.entries(sectorCounts).reduce((a, b) => a[1] > b[1] ? a : b)?.[0];
@@ -193,7 +196,7 @@ export const ActionableInsightsPanel: React.FC<ActionableInsightsPanelProps> = (
         ];
 
         // Add risk alerts based on portfolio composition
-        const avgScore = topPicks.reduce((sum: number, pick: any) => sum + pick.overall_score, 0) / topPicks.length;
+        const avgScore = topPicks.reduce((sum: number, pick: Record<string, unknown>) => sum + (pick.overall_score as number), 0) / topPicks.length;
         if (avgScore < 60) {
           realAlerts.push({
             id: 'portfolio-risk',

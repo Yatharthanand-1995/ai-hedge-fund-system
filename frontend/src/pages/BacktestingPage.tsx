@@ -102,10 +102,22 @@ const BACKTEST_CONFIG: BacktestConfig = {
 
 export const BacktestingPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
-  const [useStaticData] = useState(false); // No static data available
 
-  // No static data available
-  const [staticResult] = useState<BacktestResult | null>(null);
+  // Load static backtest results from public folder
+  const { data: staticResult, isLoading: isLoadingStatic } = useQuery<BacktestResult>({
+    queryKey: ['static-backtest'],
+    queryFn: async () => {
+      const response = await fetch('/static_backtest_result.json');
+      if (!response.ok) {
+        throw new Error('Static backtest results not found');
+      }
+      return response.json();
+    },
+    staleTime: Infinity, // Static data never goes stale
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
 
   // Use React Query for optional API-based backtest
   const { data: apiResult, isLoading: isRunning, error, refetch } = useQuery<BacktestResult>({
@@ -130,8 +142,8 @@ export const BacktestingPage: React.FC = () => {
     refetchOnMount: false,
   });
 
-  // Use static data by default, or API result if available
-  const result = useStaticData ? staticResult : (apiResult || staticResult);
+  // Use static data by default, API result if available (API overrides static)
+  const result = apiResult || staticResult;
 
   const runBacktest = () => {
     refetch();
@@ -186,7 +198,7 @@ export const BacktestingPage: React.FC = () => {
       </div>
 
       {/* Verified Results Banner */}
-      {useStaticData && staticResult && (
+      {staticResult && !apiResult && (
         <div className="professional-card p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300">
           <div className="flex items-start space-x-4">
             <div className="bg-green-500 rounded-full p-3">
@@ -252,7 +264,7 @@ export const BacktestingPage: React.FC = () => {
       )}
 
       {/* Key Insights Section */}
-      {useStaticData && staticResult && (
+      {staticResult && !apiResult && (
         <div className="professional-card p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
           <h2 className="text-2xl font-bold text-blue-900 mb-4 flex items-center space-x-2">
             <Info className="h-6 w-6" />

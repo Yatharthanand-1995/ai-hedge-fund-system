@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, TrendingDown, Calendar, DollarSign, Target, Activity, Play, Pause, Download } from 'lucide-react';
 import { cn, formatCurrency, formatPercentage } from '../../utils';
 
@@ -47,7 +47,6 @@ interface BacktestResultsPanelProps {
 export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ className }) => {
   const [backtestResults, setBacktestResults] = useState<BacktestResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<BacktestResult | null>(null);
-  const [loading, setLoading] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [config, setConfig] = useState<BacktestConfig>({
     start_date: '2023-01-01',
@@ -68,18 +67,15 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
       const response = await fetch('http://localhost:8010/backtest/history');
       if (response.ok) {
         const data = await response.json();
-        console.log(`✅ Loaded ${data.length} backtest results from API`);
 
         if (data.length > 0) {
           setBacktestResults(data);
           setSelectedResult(data[0]);
         } else {
-          console.log('ℹ️ No backtest history found yet. Run a backtest to see results.');
           setBacktestResults([]);
           setSelectedResult(null);
         }
       } else {
-        console.log('No backtest history available');
         setBacktestResults([]);
         setSelectedResult(null);
       }
@@ -104,7 +100,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
           }
         }
       }
-    } catch (error) {
+    } catch {
       console.log('Using basic fallback data for backtest');
     }
 
@@ -112,9 +108,9 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     return [mockBacktestResult];
   };
 
-  const generateRealisticBacktestData = (topPicks: any[]): BacktestResult[] => {
-    const avgScore = topPicks.reduce((sum, pick) => sum + pick.overall_score, 0) / topPicks.length;
-    const scoreStd = Math.sqrt(topPicks.reduce((sum, pick) => sum + Math.pow(pick.overall_score - avgScore, 2), 0) / topPicks.length);
+  const generateRealisticBacktestData = (topPicks: Array<Record<string, unknown>>): BacktestResult[] => {
+    const avgScore = topPicks.reduce((sum, pick) => sum + (pick.overall_score as number), 0) / topPicks.length;
+    const scoreStd = Math.sqrt(topPicks.reduce((sum, pick) => sum + Math.pow((pick.overall_score as number) - avgScore, 2), 0) / topPicks.length);
 
     // Generate multiple backtest scenarios
     const scenarios = [
@@ -123,7 +119,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
       { period: '3 Months', start: '2023-10-01', end: '2024-01-01', multiplier: 0.3 }
     ];
 
-    return scenarios.map((scenario, index) => {
+    return scenarios.map((scenario) => {
       const baseReturn = (avgScore - 50) * 0.004 * scenario.multiplier; // Base return from AI score
       const volatility = Math.max(0.08, scoreStd * 0.015);
 
@@ -157,7 +153,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
 
       // Generate rebalance log with real symbols
       const rebalanceLog = [];
-      const symbols = topPicks.slice(0, 10).map(pick => pick.symbol);
+      const symbols = topPicks.slice(0, 10).map(pick => pick.symbol as string);
 
       for (let i = 0; i < Math.min(3, periods); i++) {
         const date = new Date(scenario.start);
@@ -254,16 +250,16 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
           return generateRealisticBacktestFromConfig(config, topPicks);
         }
       }
-    } catch (error) {
+    } catch {
       console.log('Using basic backtest generation');
     }
 
     return generateBasicBacktestResult(config);
   };
 
-  const generateRealisticBacktestFromConfig = (config: BacktestConfig, topPicks: any[]): BacktestResult => {
-    const avgScore = topPicks.slice(0, config.top_n).reduce((sum, pick) => sum + pick.overall_score, 0) / Math.min(config.top_n, topPicks.length);
-    const scoreStd = Math.sqrt(topPicks.slice(0, config.top_n).reduce((sum, pick) => sum + Math.pow(pick.overall_score - avgScore, 2), 0) / Math.min(config.top_n, topPicks.length));
+  const generateRealisticBacktestFromConfig = (config: BacktestConfig, topPicks: Array<Record<string, unknown>>): BacktestResult => {
+    const avgScore = topPicks.slice(0, config.top_n).reduce((sum, pick) => sum + (pick.overall_score as number), 0) / Math.min(config.top_n, topPicks.length);
+    const scoreStd = Math.sqrt(topPicks.slice(0, config.top_n).reduce((sum, pick) => sum + Math.pow((pick.overall_score as number) - avgScore, 2), 0) / Math.min(config.top_n, topPicks.length));
 
     // Calculate time span
     const startDate = new Date(config.start_date);
@@ -302,7 +298,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
 
       // Add rebalance events
       if (i % rebalanceMonths === 0 && i < months) {
-        const symbols = topPicks.slice(0, config.top_n).map(pick => pick.symbol);
+        const symbols = topPicks.slice(0, config.top_n).map(pick => pick.symbol as string);
         rebalanceLog.push({
           date: date.toISOString().split('T')[0],
           portfolio: symbols,
@@ -403,17 +399,6 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     console.log('View Full Report clicked');
     alert('View Full Report\n\nIn a real app, this would:\n• Open detailed PDF/HTML report\n• Show all metrics and analysis\n• Include trade-by-trade breakdown\n• Provide risk analysis charts');
   };
-
-  if (loading) {
-    return (
-      <div className={cn('professional-card p-6', className)}>
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-accent"></div>
-          <h2 className="text-xl font-semibold text-foreground">Loading Backtest Results...</h2>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={cn('professional-card p-6', className)}>
@@ -661,7 +646,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip
-                    formatter={(value, name) => [
+                    formatter={(value) => [
                       formatCurrency(value as number),
                       'Portfolio Value'
                     ]}
@@ -739,7 +724,8 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
   );
 };
 
-// Mock data for demo purposes
+// Mock data for demo purposes (unused but kept for future reference)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockBacktestResult: BacktestResult = {
   start_date: '2023-01-01',
   end_date: '2024-01-01',

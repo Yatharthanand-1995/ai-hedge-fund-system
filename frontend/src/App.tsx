@@ -3,6 +3,7 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Navigation } from './components/navigation/Navigation';
+import { ToastProvider } from './components/common/Toast';
 import { StockAnalysisPage } from './pages/StockAnalysisPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { BacktestingPage } from './pages/BacktestingPage';
@@ -11,7 +12,6 @@ import { SectorAllocationPanel } from './components/dashboard/SectorAllocationPa
 import { MultiAgentConsensusPanel } from './components/dashboard/MultiAgentConsensusPanel';
 import { ActionableInsightsPanel } from './components/dashboard/ActionableInsightsPanel';
 import { RiskManagementPanel } from './components/dashboard/RiskManagementPanel';
-import { BacktestResultsPanel } from './components/dashboard/BacktestResultsPanel';
 import { InvestmentGuidePanel } from './components/dashboard/InvestmentGuidePanel';
 import { CommandCenter } from './components/dashboard/CommandCenter';
 import { SmartFilterBar } from './components/dashboard/SmartFilterBar';
@@ -83,7 +83,7 @@ const queryClient = new QueryClient({
 
 // Enhanced Professional Dashboard Component
 const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void }> = ({ onPageChange }) => {
-  const [topPicks, setTopPicks] = useState<any[]>([]);
+  const [topPicks, setTopPicks] = useState<Array<Record<string, unknown>>>([]);
   const [isLoadingPicks, setIsLoadingPicks] = useState(true);
   const [filters, setFilters] = useState<FilterOptions>({
     sector: [],
@@ -103,20 +103,20 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
         const response = await fetch('http://localhost:8010/portfolio/top-picks?limit=12');
         if (response.ok) {
           const data = await response.json();
-          const enhancedPicks = data.top_picks?.map((pick: any, index: number) => ({
+          const enhancedPicks = data.top_picks?.map((pick: Record<string, unknown>) => ({
             ...pick,
             nextAction: {
-              type: pick.overall_score > 75 ? 'buy' : pick.overall_score < 50 ? 'sell' : 'hold',
-              urgency: pick.overall_score > 80 ? 'high' : pick.overall_score > 60 ? 'medium' : 'low',
-              description: pick.overall_score > 75
+              type: (pick.overall_score as number) > 75 ? 'buy' : (pick.overall_score as number) < 50 ? 'sell' : 'hold',
+              urgency: (pick.overall_score as number) > 80 ? 'high' : (pick.overall_score as number) > 60 ? 'medium' : 'low',
+              description: (pick.overall_score as number) > 75
                 ? 'Strong buy signal - Consider increasing position'
-                : pick.overall_score < 50
+                : (pick.overall_score as number) < 50
                 ? 'Weak performance - Consider reducing exposure'
                 : 'Monitor closely for trend changes',
-              targetPrice: pick.market_data.current_price * (pick.overall_score > 75 ? 1.1 : 0.9),
+              targetPrice: ((pick.market_data as Record<string, number>).current_price * ((pick.overall_score as number) > 75 ? 1.1 : 0.9)),
               timeframe: 'This Week'
             },
-            momentum: pick.agent_scores?.momentum > 70 ? 'bullish' : pick.agent_scores?.momentum < 40 ? 'bearish' : 'neutral',
+            momentum: ((pick.agent_scores as Record<string, number>)?.momentum > 70 ? 'bullish' : (pick.agent_scores as Record<string, number>)?.momentum < 40 ? 'bearish' : 'neutral'),
             riskLevel: pick.overall_score > 70 ? 'low' : pick.overall_score > 50 ? 'medium' : 'high'
           })) || [];
           setTopPicks(enhancedPicks);
@@ -130,7 +130,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
     fetchTopPicks();
   }, []);
 
-  const handleActionClick = (action: any, symbol: string) => {
+  const handleActionClick = (action: Record<string, unknown>, symbol: string) => {
     console.log(`Action ${action.type} clicked for ${symbol}`, action);
     // In a real app, this would trigger actual trading actions
   };
@@ -370,32 +370,34 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <div className="min-h-screen bg-background flex justify-center">
-          <div className="w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6">
-            <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
-            {currentPage === 'dashboard' && (
-              <ErrorBoundary>
-                <Dashboard onPageChange={setCurrentPage} />
-              </ErrorBoundary>
-            )}
-            {currentPage === 'analysis' && (
-              <ErrorBoundary>
-                <StockAnalysisPage />
-              </ErrorBoundary>
-            )}
-            {currentPage === 'portfolio' && (
-              <ErrorBoundary>
-                <PortfolioPage />
-              </ErrorBoundary>
-            )}
-            {currentPage === 'backtesting' && (
-              <ErrorBoundary>
-                <BacktestingPage />
-              </ErrorBoundary>
-            )}
+        <ToastProvider>
+          <div className="min-h-screen bg-background flex justify-center">
+            <div className="w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6">
+              <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+              {currentPage === 'dashboard' && (
+                <ErrorBoundary>
+                  <Dashboard onPageChange={setCurrentPage} />
+                </ErrorBoundary>
+              )}
+              {currentPage === 'analysis' && (
+                <ErrorBoundary>
+                  <StockAnalysisPage />
+                </ErrorBoundary>
+              )}
+              {currentPage === 'portfolio' && (
+                <ErrorBoundary>
+                  <PortfolioPage />
+                </ErrorBoundary>
+              )}
+              {currentPage === 'backtesting' && (
+                <ErrorBoundary>
+                  <BacktestingPage />
+                </ErrorBoundary>
+              )}
+            </div>
           </div>
-        </div>
-        <ReactQueryDevtools initialIsOpen={false} />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </ToastProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

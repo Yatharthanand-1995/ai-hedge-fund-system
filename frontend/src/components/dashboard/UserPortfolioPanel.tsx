@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, Lightbulb, AlertCircle, CheckCircle, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, PieChart, Lightbulb, AlertCircle, CheckCircle, Target, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn, formatCurrency, formatPercentage } from '../../utils';
+import { SkeletonLoader } from '../common/SkeletonLoader';
 
 interface Position {
   symbol: string;
@@ -93,42 +94,44 @@ export const UserPortfolioPanel: React.FC<UserPortfolioPanelProps> = ({ classNam
   const [loadingRecs, setLoadingRecs] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchPortfolio = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch('http://localhost:8010/portfolio/user');
+      if (!response.ok) {
+        throw new Error('Unable to fetch portfolio data. Please check your connection.');
+      }
+      const data = await response.json();
+      setPortfolio(data);
+      setError(null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load portfolio data. Please try again.';
+      setError(errorMessage);
+      console.error('Failed to fetch user portfolio:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRecommendations = async () => {
+    try {
+      setLoadingRecs(true);
+      const response = await fetch('http://localhost:8010/portfolio/user/recommendations');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setRecommendations(data);
+    } catch (err) {
+      console.error('Failed to fetch recommendations:', err);
+      // Don't set error - recommendations are optional
+    } finally {
+      setLoadingRecs(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchPortfolio = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:8010/portfolio/user');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setPortfolio(data);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch user portfolio:', err);
-        setError('Failed to load portfolio data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchRecommendations = async () => {
-      try {
-        setLoadingRecs(true);
-        const response = await fetch('http://localhost:8010/portfolio/user/recommendations');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setRecommendations(data);
-      } catch (err) {
-        console.error('Failed to fetch recommendations:', err);
-        // Don't set error - recommendations are optional
-      } finally {
-        setLoadingRecs(false);
-      }
-    };
-
     fetchPortfolio();
     fetchRecommendations();
 
@@ -139,14 +142,28 @@ export const UserPortfolioPanel: React.FC<UserPortfolioPanelProps> = ({ classNam
     }, 60000);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
     return (
       <div className={cn('professional-card p-6', className)}>
-        <div className="flex items-center space-x-3">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-accent"></div>
-          <h2 className="text-xl font-semibold text-foreground">Loading Your Portfolio...</h2>
+        <div className="flex items-center justify-between mb-6">
+          <SkeletonLoader variant="text" lines={1} height="24px" className="w-48" />
+          <SkeletonLoader variant="text" lines={1} height="16px" className="w-32" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="text-center">
+              <SkeletonLoader variant="text" lines={1} height="14px" className="mb-2" />
+              <SkeletonLoader variant="text" lines={1} height="28px" className="mb-1" />
+              <SkeletonLoader variant="text" lines={1} height="12px" />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-3">
+          <SkeletonLoader variant="card" />
+          <SkeletonLoader variant="card" />
         </div>
       </div>
     );
@@ -154,10 +171,23 @@ export const UserPortfolioPanel: React.FC<UserPortfolioPanelProps> = ({ classNam
 
   if (error || !portfolio) {
     return (
-      <div className={cn('professional-card p-6', className)}>
-        <div className="text-red-400">
-          <h2 className="text-xl font-semibold mb-2">Error Loading Portfolio</h2>
-          <p className="text-sm">{error || 'Unknown error'}</p>
+      <div className={cn('professional-card p-6 border-2 border-red-500/20 bg-red-500/5', className)}>
+        <div className="flex items-start space-x-4">
+          <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-red-500 mb-2">Failed to Load Portfolio</h3>
+            <p className="text-sm text-muted-foreground mb-4">{error || 'Unable to load portfolio data'}</p>
+            <button
+              onClick={() => {
+                fetchPortfolio();
+                fetchRecommendations();
+              }}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/80 text-accent-foreground rounded-lg font-medium text-sm transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>Retry</span>
+            </button>
+          </div>
         </div>
       </div>
     );

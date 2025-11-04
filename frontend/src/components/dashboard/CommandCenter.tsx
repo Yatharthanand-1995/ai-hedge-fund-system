@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, TrendingUp, TrendingDown, CheckCircle, Clock, X, Bell, Target, Activity } from 'lucide-react';
 import { cn } from '../../utils';
+import { SkeletonLoader } from '../common/SkeletonLoader';
 
 interface ActionItem {
   id: string;
@@ -12,7 +13,7 @@ interface ActionItem {
   action: {
     label: string;
     type: 'buy' | 'sell' | 'review' | 'dismiss';
-    data?: any;
+    data?: Record<string, unknown>;
   };
   timestamp: string;
   dismissed?: boolean;
@@ -27,6 +28,7 @@ interface CommandCenterProps {
 export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageChange, currentPage = 'dashboard' }) => {
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dismissedItems, setDismissedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -34,11 +36,13 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     // Refresh every 5 minutes
     const interval = setInterval(fetchActionItems, 5 * 60 * 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchActionItems = async () => {
     try {
       setLoading(true);
+      setError(null);
 
       // Fetch top picks and portfolio summary
       const [picksResponse, summaryResponse] = await Promise.all([
@@ -47,7 +51,7 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
       ]);
 
       if (!picksResponse.ok || !summaryResponse.ok) {
-        throw new Error('Failed to fetch data');
+        throw new Error('Unable to fetch market data. Please check your connection.');
       }
 
       const picks = await picksResponse.json();
@@ -56,19 +60,22 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
       // Generate action items from data
       const items = generateActionItems(picks.top_picks || [], summary);
       setActionItems(items);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch action items:', error);
+      setError(null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load action items. Please try again.';
+      setError(errorMessage);
+      console.error('Failed to fetch action items:', err);
+    } finally {
       setLoading(false);
     }
   };
 
-  const generateActionItems = (topPicks: any[], summary: any): ActionItem[] => {
+  const generateActionItems = (topPicks: unknown[], summary: Record<string, unknown>): ActionItem[] => {
     const items: ActionItem[] = [];
     const now = new Date().toISOString();
 
     // Risk alerts (URGENT)
-    if (summary.riskLevel === 'high') {
+    if (summary.riskLevel as string === 'high') {
       items.push({
         id: 'risk-alert-1',
         type: 'urgent',
@@ -85,15 +92,15 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     }
 
     // Strong buy signals (IMPORTANT)
-    const strongBuys = topPicks.filter(pick => pick.overall_score >= 75).slice(0, 2);
-    strongBuys.forEach((pick, index) => {
+    const strongBuys = topPicks.filter((pick: Record<string, unknown>) => (pick.overall_score as number) >= 75).slice(0, 2);
+    strongBuys.forEach((pick: Record<string, unknown>) => {
       items.push({
-        id: `buy-signal-${pick.symbol}`,
+        id: `buy-signal-${pick.symbol as string}`,
         type: 'important',
         category: 'buy_signal',
-        symbol: pick.symbol,
-        title: `🟢 Strong Buy Signal: ${pick.symbol}`,
-        description: `Score: ${pick.overall_score.toFixed(1)} | Price: $${pick.market_data.current_price.toFixed(2)} | High confidence opportunity`,
+        symbol: pick.symbol as string,
+        title: `🟢 Strong Buy Signal: ${pick.symbol as string}`,
+        description: `Score: ${(pick.overall_score as number).toFixed(1)} | Price: $${((pick.market_data as Record<string, number>).current_price).toFixed(2)} | High confidence opportunity`,
         action: {
           label: 'View Analysis',
           type: 'review',
@@ -104,18 +111,18 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     });
 
     // Price alerts - stocks near key levels (URGENT)
-    topPicks.slice(0, 5).forEach(pick => {
-      const priceChange = pick.market_data.price_change_percent || 0;
+    topPicks.slice(0, 5).forEach((pick: Record<string, unknown>) => {
+      const priceChange = ((pick.market_data as Record<string, number>).price_change_percent || 0);
 
       // Large price movement
       if (Math.abs(priceChange) >= 5) {
         items.push({
-          id: `price-alert-${pick.symbol}`,
+          id: `price-alert-${pick.symbol as string}`,
           type: 'urgent',
           category: 'price_alert',
-          symbol: pick.symbol,
-          title: `📊 ${pick.symbol} Major Move: ${priceChange > 0 ? '↑' : '↓'}${Math.abs(priceChange).toFixed(1)}%`,
-          description: `${pick.symbol} moved significantly. Current: $${pick.market_data.current_price.toFixed(2)}. Review position.`,
+          symbol: pick.symbol as string,
+          title: `📊 ${pick.symbol as string} Major Move: ${priceChange > 0 ? '↑' : '↓'}${Math.abs(priceChange).toFixed(1)}%`,
+          description: `${pick.symbol as string} moved significantly. Current: $${((pick.market_data as Record<string, number>).current_price).toFixed(2)}. Review position.`,
           action: {
             label: 'Check Details',
             type: 'review',
@@ -127,15 +134,15 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     });
 
     // Weak performers (sell signals)
-    const weakPerformers = topPicks.filter(pick => pick.overall_score < 50).slice(0, 2);
-    weakPerformers.forEach(pick => {
+    const weakPerformers = topPicks.filter((pick: Record<string, unknown>) => (pick.overall_score as number) < 50).slice(0, 2);
+    weakPerformers.forEach((pick: Record<string, unknown>) => {
       items.push({
-        id: `sell-signal-${pick.symbol}`,
+        id: `sell-signal-${pick.symbol as string}`,
         type: 'important',
         category: 'sell_signal',
-        symbol: pick.symbol,
-        title: `🔴 Weak Performance: ${pick.symbol}`,
-        description: `Score: ${pick.overall_score.toFixed(1)} | Consider reducing exposure or exiting position`,
+        symbol: pick.symbol as string,
+        title: `🔴 Weak Performance: ${pick.symbol as string}`,
+        description: `Score: ${(pick.overall_score as number).toFixed(1)} | Consider reducing exposure or exiting position`,
         action: {
           label: 'Review Position',
           type: 'review',
@@ -146,13 +153,13 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     });
 
     // Portfolio rebalance needed (IMPORTANT)
-    if (summary.actionsRequired > 0) {
+    if ((summary.actionsRequired as number) > 0) {
       items.push({
         id: 'rebalance-1',
         type: 'important',
         category: 'rebalance',
         title: `⚖️ Portfolio Rebalance Recommended`,
-        description: `${summary.actionsRequired} actions required. Sector allocation may need adjustment.`,
+        description: `${summary.actionsRequired as number} actions required. Sector allocation may need adjustment.`,
         action: {
           label: 'Review Portfolio',
           type: 'review',
@@ -167,8 +174,8 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
       id: 'market-regime-1',
       type: 'normal',
       category: 'review',
-      title: `📈 Market Status: ${summary.marketRegime?.toUpperCase() || 'NORMAL'}`,
-      description: `AI Confidence: ${summary.aiConfidenceIndex}/10 | Active positions: ${summary.activePositions}`,
+      title: `📈 Market Status: ${(summary.marketRegime as string | undefined)?.toUpperCase() || 'NORMAL'}`,
+      description: `AI Confidence: ${summary.aiConfidenceIndex as number}/10 | Active positions: ${summary.activePositions as number}`,
       action: {
         label: 'View Dashboard',
         type: 'review',
@@ -274,9 +281,35 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
   if (loading) {
     return (
       <div className={cn('professional-card p-6', className)}>
-        <div className="flex items-center space-x-3">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-accent"></div>
-          <span className="text-muted-foreground">Loading action items...</span>
+        <div className="flex items-center justify-between mb-6">
+          <SkeletonLoader variant="text" lines={1} height="24px" className="w-48" />
+          <SkeletonLoader variant="button" height="32px" />
+        </div>
+        <div className="space-y-3">
+          <SkeletonLoader variant="card" />
+          <SkeletonLoader variant="card" />
+          <SkeletonLoader variant="card" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={cn('professional-card p-6 border-2 border-red-500/20 bg-red-500/5', className)}>
+        <div className="flex items-start space-x-4">
+          <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-red-500 mb-2">Failed to Load Actions</h3>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <button
+              onClick={fetchActionItems}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/80 text-accent-foreground rounded-lg font-medium text-sm transition-colors"
+            >
+              <Clock className="h-4 w-4" />
+              <span>Retry</span>
+            </button>
+          </div>
         </div>
       </div>
     );
