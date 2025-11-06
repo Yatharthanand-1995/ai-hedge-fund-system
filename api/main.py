@@ -1896,6 +1896,364 @@ async def compare_strategies(
     raise HTTPException(status_code=501, detail="Strategy comparison not yet implemented")
 
 
+# ============================================================================
+# Paper Trading Endpoints
+# ============================================================================
+
+# Initialize paper portfolio manager singleton
+from core.paper_portfolio_manager import PaperPortfolioManager
+paper_portfolio = PaperPortfolioManager()
+
+@app.post("/portfolio/paper/buy", tags=["Paper Trading"])
+async def paper_buy(symbol: str, shares: int):
+    """
+    Execute a paper trade buy order.
+
+    - **symbol**: Stock symbol (e.g., AAPL)
+    - **shares**: Number of shares to buy
+
+    Returns transaction details and updated portfolio state.
+    """
+    try:
+        # Get current price
+        provider = EnhancedYahooProvider()
+        price_data = provider.get_comprehensive_data(symbol)
+
+        if not price_data or 'current_price' not in price_data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not fetch current price for {symbol}"
+            )
+
+        current_price = price_data['current_price']
+
+        # Execute buy
+        result = paper_portfolio.buy(symbol, shares, current_price)
+
+        if not result['success']:
+            raise HTTPException(status_code=400, detail=result['message'])
+
+        return {
+            "success": True,
+            "transaction": result,
+            "portfolio": paper_portfolio.get_portfolio()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Paper buy error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/paper/sell", tags=["Paper Trading"])
+async def paper_sell(symbol: str, shares: int):
+    """
+    Execute a paper trade sell order.
+
+    - **symbol**: Stock symbol (e.g., AAPL)
+    - **shares**: Number of shares to sell
+
+    Returns transaction details including P&L and updated portfolio state.
+    """
+    try:
+        # Get current price
+        provider = EnhancedYahooProvider()
+        price_data = provider.get_comprehensive_data(symbol)
+
+        if not price_data or 'current_price' not in price_data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not fetch current price for {symbol}"
+            )
+
+        current_price = price_data['current_price']
+
+        # Execute sell
+        result = paper_portfolio.sell(symbol, shares, current_price)
+
+        if not result['success']:
+            raise HTTPException(status_code=400, detail=result['message'])
+
+        return {
+            "success": True,
+            "transaction": result,
+            "portfolio": paper_portfolio.get_portfolio()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Paper sell error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper", tags=["Paper Trading"])
+async def get_paper_portfolio():
+    """
+    Get current paper trading portfolio state.
+
+    Returns cash balance, positions (with current market prices), and portfolio statistics.
+    Positions include:
+    - Current market price
+    - Market value
+    - Unrealized P&L ($ and %)
+    - Cost basis
+    """
+    try:
+        portfolio = paper_portfolio.get_portfolio_with_prices()
+        stats = paper_portfolio.get_stats()
+
+        return {
+            "portfolio": portfolio,
+            "stats": stats
+        }
+
+    except Exception as e:
+        logger.error(f"Get paper portfolio error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/transactions", tags=["Paper Trading"])
+async def get_paper_transactions(limit: Optional[int] = None):
+    """
+    Get paper trading transaction history.
+
+    - **limit**: Optional limit on number of transactions (most recent first)
+
+    Returns list of all buy/sell transactions with timestamps.
+    """
+    try:
+        transactions = paper_portfolio.get_transactions(limit=limit)
+
+        return {
+            "transactions": transactions,
+            "total_count": len(transactions)
+        }
+
+    except Exception as e:
+        logger.error(f"Get paper transactions error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/paper/reset", tags=["Paper Trading"])
+async def reset_paper_portfolio():
+    """
+    Reset paper trading portfolio to initial state ($10,000 cash).
+
+    Archives old transaction log and creates fresh portfolio.
+    """
+    try:
+        result = paper_portfolio.reset_portfolio()
+
+        return {
+            "success": True,
+            "message": result['message'],
+            "portfolio": paper_portfolio.get_portfolio()
+        }
+
+    except Exception as e:
+        logger.error(f"Reset paper portfolio error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Auto-Sell Monitoring Endpoints
+# ============================================================================
+
+@app.get("/portfolio/paper/auto-sell/rules")
+async def get_auto_sell_rules():
+    """
+    Get current auto-sell rules configuration.
+
+    Returns auto-sell settings including stop-loss, take-profit, and AI signal monitoring.
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        monitor = AutoSellMonitor()
+
+        return {
+            "success": True,
+            "rules": monitor.get_rules()
+        }
+
+    except Exception as e:
+        logger.error(f"Get auto-sell rules error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/paper/auto-sell/rules")
+async def update_auto_sell_rules(
+    enabled: bool = None,
+    stop_loss_percent: float = None,
+    take_profit_percent: float = None,
+    watch_ai_signals: bool = None,
+    max_position_age_days: int = None
+):
+    """
+    Update auto-sell rules.
+
+    Args:
+        enabled: Enable/disable auto-sell monitoring
+        stop_loss_percent: Stop-loss threshold (e.g., -10 for -10% loss)
+        take_profit_percent: Take-profit threshold (e.g., 20 for +20% gain)
+        watch_ai_signals: Monitor AI recommendation changes
+        max_position_age_days: Auto-sell positions older than X days
+
+    Example:
+        POST /portfolio/paper/auto-sell/rules?enabled=true&stop_loss_percent=-10&take_profit_percent=20
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        monitor = AutoSellMonitor()
+
+        # Build update dict from provided parameters
+        updates = {}
+        if enabled is not None:
+            updates['enabled'] = enabled
+        if stop_loss_percent is not None:
+            updates['stop_loss_percent'] = stop_loss_percent
+        if take_profit_percent is not None:
+            updates['take_profit_percent'] = take_profit_percent
+        if watch_ai_signals is not None:
+            updates['watch_ai_signals'] = watch_ai_signals
+        if max_position_age_days is not None:
+            updates['max_position_age_days'] = max_position_age_days
+
+        result = monitor.update_rules(**updates)
+        return result
+
+    except Exception as e:
+        logger.error(f"Update auto-sell rules error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/auto-sell/scan")
+async def scan_portfolio_for_auto_sell():
+    """
+    Scan portfolio for positions that should be auto-sold.
+
+    Returns list of positions triggering auto-sell rules (stop-loss, take-profit, AI signals).
+    Does NOT execute sells - just returns recommendations.
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        monitor = AutoSellMonitor()
+
+        # Get portfolio with current prices
+        portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+
+        # Get AI recommendations for positions
+        # Fetch current AI recommendations for owned stocks
+        ai_recommendations = {}
+        for symbol in portfolio_with_prices.get('positions', {}).keys():
+            try:
+                # Analyze stock to get current recommendation
+                analysis_result = await analyze_single_stock(symbol)
+                ai_recommendations[symbol] = analysis_result.get('recommendation', 'HOLD')
+            except:
+                # If analysis fails, default to HOLD
+                ai_recommendations[symbol] = 'HOLD'
+
+        # Scan portfolio
+        positions_to_sell = monitor.scan_portfolio(portfolio_with_prices, ai_recommendations)
+
+        return {
+            "success": True,
+            "positions_to_sell": positions_to_sell,
+            "count": len(positions_to_sell),
+            "rules": monitor.get_rules()
+        }
+
+    except Exception as e:
+        logger.error(f"Scan portfolio error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/paper/auto-sell/execute")
+async def execute_auto_sells():
+    """
+    Execute auto-sells for all triggered positions.
+
+    Scans portfolio, identifies positions meeting auto-sell criteria, and executes sells.
+    Returns summary of executed sells.
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        monitor = AutoSellMonitor()
+
+        # Get portfolio with current prices
+        portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+
+        # Get AI recommendations
+        ai_recommendations = {}
+        for symbol in portfolio_with_prices.get('positions', {}).keys():
+            try:
+                analysis_result = await analyze_single_stock(symbol)
+                ai_recommendations[symbol] = analysis_result.get('recommendation', 'HOLD')
+            except:
+                ai_recommendations[symbol] = 'HOLD'
+
+        # Scan portfolio
+        positions_to_sell = monitor.scan_portfolio(portfolio_with_prices, ai_recommendations)
+
+        # Execute sells
+        executed_sells = []
+        for position in positions_to_sell:
+            symbol = position['symbol']
+            shares = position['shares']
+            current_price = position['current_price']
+
+            # Execute sell
+            result = paper_portfolio.sell(symbol, shares, current_price)
+
+            if result['success']:
+                executed_sells.append({
+                    'symbol': symbol,
+                    'shares': shares,
+                    'price': current_price,
+                    'reason': position['reason'],
+                    'trigger': position['trigger'],
+                    'pnl': result.get('pnl', 0),
+                    'pnl_percent': result.get('pnl_percent', 0)
+                })
+
+        return {
+            "success": True,
+            "executed_sells": executed_sells,
+            "count": len(executed_sells),
+            "portfolio": paper_portfolio.get_portfolio_with_prices()
+        }
+
+    except Exception as e:
+        logger.error(f"Execute auto-sells error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/auto-sell/alerts")
+async def get_auto_sell_alerts(limit: int = 50):
+    """
+    Get recent auto-sell alerts/triggers.
+
+    Returns history of auto-sell events (triggered but not necessarily executed).
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        monitor = AutoSellMonitor()
+
+        alerts = monitor.get_alerts(limit=limit)
+
+        return {
+            "success": True,
+            "alerts": alerts,
+            "count": len(alerts)
+        }
+
+    except Exception as e:
+        logger.error(f"Get auto-sell alerts error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.on_event("startup")
 async def startup_event():
     """Startup event"""
@@ -1903,6 +2261,7 @@ async def startup_event():
     logger.info("✅ All 4 agents initialized")
     logger.info("✅ Narrative engine ready")
     logger.info("✅ Portfolio manager ready")
+    logger.info("✅ Auto-sell monitor ready")
     logger.info("✅ API endpoints configured")
 
 @app.on_event("shutdown")

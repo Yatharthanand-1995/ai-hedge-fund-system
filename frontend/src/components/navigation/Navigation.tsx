@@ -5,8 +5,8 @@ import { FeatureFlagsPanel } from '../settings/FeatureFlagsPanel';
 import { hasExperimentalFeatures } from '../../config/featureFlags';
 
 interface NavigationProps {
-  currentPage: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting';
-  onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void;
+  currentPage: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details';
+  onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details') => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -22,6 +22,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'analysis' as const, label: 'Stock Analysis', icon: '📊', shortcut: '2' },
     { id: 'portfolio' as const, label: 'Portfolio Manager', icon: '📈', shortcut: '3' },
     { id: 'backtesting' as const, label: '5-Year Backtest', icon: '📉', shortcut: '4' },
+    { id: 'paper-trading' as const, label: 'Paper Trading', icon: '💵', shortcut: '5' },
+    { id: 'system-details' as const, label: 'System Details', icon: '📚', shortcut: '6' },
   ];
 
   // Keyboard navigation support

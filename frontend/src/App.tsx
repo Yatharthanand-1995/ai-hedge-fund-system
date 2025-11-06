@@ -7,6 +7,8 @@ import { ToastProvider } from './components/common/Toast';
 import { StockAnalysisPage } from './pages/StockAnalysisPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { BacktestingPage } from './pages/BacktestingPage';
+import { PaperTradingPage } from './pages/PaperTradingPage';
+import SystemDetailsPage from './pages/SystemDetailsPage';
 import { IntelligentStockCard } from './components/dashboard/IntelligentStockCard';
 import { SectorAllocationPanel } from './components/dashboard/SectorAllocationPanel';
 import { MultiAgentConsensusPanel } from './components/dashboard/MultiAgentConsensusPanel';
@@ -82,7 +84,7 @@ const queryClient = new QueryClient({
 });
 
 // Enhanced Professional Dashboard Component
-const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting') => void }> = ({ onPageChange }) => {
+const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details') => void }> = ({ onPageChange }) => {
   const [topPicks, setTopPicks] = useState<Array<Record<string, unknown>>>([]);
   const [isLoadingPicks, setIsLoadingPicks] = useState(true);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -364,7 +366,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 // Main App Component
 function App() {
   console.log('🎯 App component rendering...');
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting'>('dashboard');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details'>('dashboard');
   console.log('📄 Current page:', currentPage);
 
   return (
@@ -392,6 +394,16 @@ function App() {
               {currentPage === 'backtesting' && (
                 <ErrorBoundary>
                   <BacktestingPage />
+                </ErrorBoundary>
+              )}
+              {currentPage === 'paper-trading' && (
+                <ErrorBoundary>
+                  <PaperTradingPage />
+                </ErrorBoundary>
+              )}
+              {currentPage === 'system-details' && (
+                <ErrorBoundary>
+                  <SystemDetailsPage />
                 </ErrorBoundary>
               )}
             </div>
