@@ -2058,10 +2058,244 @@ async def reset_paper_portfolio():
 
 
 # ============================================================================
+# Auto-Buy Monitoring Endpoints
+# ============================================================================
+
+@app.get("/portfolio/paper/auto-buy/rules", tags=["Paper Trading - Automation"])
+async def get_auto_buy_rules():
+    """
+    Get current auto-buy rules configuration.
+
+    Returns auto-buy settings including score thresholds, position sizing, and diversification rules.
+    """
+    try:
+        from core.auto_buy_monitor import AutoBuyMonitor
+        monitor = AutoBuyMonitor()
+
+        return {
+            "success": True,
+            "rules": monitor.get_rules()
+        }
+
+    except Exception as e:
+        logger.error(f"Get auto-buy rules error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/paper/auto-buy/rules", tags=["Paper Trading - Automation"])
+async def update_auto_buy_rules(
+    enabled: Optional[bool] = None,
+    min_score_threshold: Optional[float] = None,
+    max_position_size_percent: Optional[float] = None,
+    max_positions: Optional[int] = None,
+    min_confidence_level: Optional[str] = None,
+    max_single_trade_amount: Optional[float] = None,
+    require_sector_diversification: Optional[bool] = None,
+    max_sector_allocation_percent: Optional[float] = None
+):
+    """
+    Update auto-buy rules.
+
+    Example:
+        POST /portfolio/paper/auto-buy/rules?enabled=true&min_score_threshold=75&max_positions=10
+    """
+    try:
+        from core.auto_buy_monitor import AutoBuyMonitor
+        monitor = AutoBuyMonitor()
+
+        # Build update dict
+        updates = {}
+        if enabled is not None:
+            updates['enabled'] = enabled
+        if min_score_threshold is not None:
+            updates['min_score_threshold'] = min_score_threshold
+        if max_position_size_percent is not None:
+            updates['max_position_size_percent'] = max_position_size_percent
+        if max_positions is not None:
+            updates['max_positions'] = max_positions
+        if min_confidence_level is not None:
+            updates['min_confidence_level'] = min_confidence_level
+        if max_single_trade_amount is not None:
+            updates['max_single_trade_amount'] = max_single_trade_amount
+        if require_sector_diversification is not None:
+            updates['require_sector_diversification'] = require_sector_diversification
+        if max_sector_allocation_percent is not None:
+            updates['max_sector_allocation_percent'] = max_sector_allocation_percent
+
+        result = monitor.update_rules(**updates)
+        return result
+
+    except Exception as e:
+        logger.error(f"Update auto-buy rules error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/auto-buy/scan", tags=["Paper Trading - Automation"])
+async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
+    """
+    Scan market for auto-buy opportunities.
+
+    Analyzes top stocks from the universe and identifies buy opportunities
+    based on auto-buy rules (score, recommendation, confidence).
+
+    Does NOT execute buys - just returns recommendations.
+    """
+    try:
+        from core.auto_buy_monitor import AutoBuyMonitor
+        from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
+
+        monitor = AutoBuyMonitor()
+
+        # Get portfolio state
+        portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+        portfolio_stats = paper_portfolio.get_stats()
+
+        portfolio_cash = portfolio_with_prices['cash']
+        portfolio_total_value = portfolio_stats['total_value']
+        num_positions = len(portfolio_with_prices.get('positions', {}))
+        owned_symbols = list(portfolio_with_prices.get('positions', {}).keys())
+
+        # Analyze top stocks from universe
+        symbols_to_analyze = [s for s in US_TOP_100_STOCKS[:universe_limit] if s not in owned_symbols]
+
+        # Batch analyze stocks
+        batch_request = BatchAnalysisRequest(symbols=symbols_to_analyze)
+        batch_result = await batch_analyze(batch_request)
+        analyses = batch_result["analyses"]
+
+        # Scan for opportunities
+        opportunities = monitor.scan_opportunities(
+            analyses=analyses,
+            portfolio_cash=portfolio_cash,
+            portfolio_total_value=portfolio_total_value,
+            num_positions=num_positions,
+            owned_symbols=owned_symbols,
+            sector_mapping=SECTOR_MAPPING,
+            portfolio_positions=portfolio_with_prices.get('positions', {})
+        )
+
+        return {
+            "success": True,
+            "opportunities": opportunities,
+            "count": len(opportunities),
+            "analyzed": len(analyses),
+            "rules": monitor.get_rules(),
+            "portfolio_state": {
+                "cash": portfolio_cash,
+                "num_positions": num_positions,
+                "total_value": portfolio_total_value
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Scan opportunities error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/paper/auto-buy/execute", tags=["Paper Trading - Automation"])
+async def execute_auto_buys(universe_limit: int = 50):
+    """
+    Execute auto-buys for all identified opportunities.
+
+    Scans market, identifies stocks meeting auto-buy criteria, and executes buys.
+    Returns summary of executed buys.
+    """
+    try:
+        from core.auto_buy_monitor import AutoBuyMonitor
+        from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
+
+        monitor = AutoBuyMonitor()
+
+        # Get portfolio state
+        portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+        portfolio_stats = paper_portfolio.get_stats()
+
+        portfolio_cash = portfolio_with_prices['cash']
+        portfolio_total_value = portfolio_stats['total_value']
+        num_positions = len(portfolio_with_prices.get('positions', {}))
+        owned_symbols = list(portfolio_with_prices.get('positions', {}).keys())
+
+        # Analyze top stocks
+        symbols_to_analyze = [s for s in US_TOP_100_STOCKS[:universe_limit] if s not in owned_symbols]
+
+        batch_request = BatchAnalysisRequest(symbols=symbols_to_analyze)
+        batch_result = await batch_analyze(batch_request)
+        analyses = batch_result["analyses"]
+
+        # Scan for opportunities
+        opportunities = monitor.scan_opportunities(
+            analyses=analyses,
+            portfolio_cash=portfolio_cash,
+            portfolio_total_value=portfolio_total_value,
+            num_positions=num_positions,
+            owned_symbols=owned_symbols,
+            sector_mapping=SECTOR_MAPPING,
+            portfolio_positions=portfolio_with_prices.get('positions', {})
+        )
+
+        # Execute buys
+        executed_buys = []
+        for opportunity in opportunities:
+            symbol = opportunity['symbol']
+            shares = opportunity['shares']
+            price = opportunity['price']
+
+            # Execute buy
+            result = paper_portfolio.buy(symbol, shares, price)
+
+            if result['success']:
+                executed_buys.append({
+                    'symbol': symbol,
+                    'shares': shares,
+                    'price': price,
+                    'total_cost': opportunity['total_cost'],
+                    'reason': opportunity['reason'],
+                    'overall_score': opportunity['overall_score'],
+                    'recommendation': opportunity['recommendation'],
+                    'sector': opportunity.get('sector', 'Unknown')
+                })
+
+        return {
+            "success": True,
+            "executed_buys": executed_buys,
+            "count": len(executed_buys),
+            "portfolio": paper_portfolio.get_portfolio_with_prices()
+        }
+
+    except Exception as e:
+        logger.error(f"Execute auto-buys error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/auto-buy/alerts", tags=["Paper Trading - Automation"])
+async def get_auto_buy_alerts(limit: int = 50):
+    """
+    Get recent auto-buy alerts/triggers.
+
+    Returns history of auto-buy events (triggered but not necessarily executed).
+    """
+    try:
+        from core.auto_buy_monitor import AutoBuyMonitor
+        monitor = AutoBuyMonitor()
+
+        alerts = monitor.get_alerts(limit=limit)
+
+        return {
+            "success": True,
+            "alerts": alerts,
+            "count": len(alerts)
+        }
+
+    except Exception as e:
+        logger.error(f"Get auto-buy alerts error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # Auto-Sell Monitoring Endpoints
 # ============================================================================
 
-@app.get("/portfolio/paper/auto-sell/rules")
+@app.get("/portfolio/paper/auto-sell/rules", tags=["Paper Trading - Automation"])
 async def get_auto_sell_rules():
     """
     Get current auto-sell rules configuration.
@@ -2082,7 +2316,7 @@ async def get_auto_sell_rules():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/portfolio/paper/auto-sell/rules")
+@app.post("/portfolio/paper/auto-sell/rules", tags=["Paper Trading - Automation"])
 async def update_auto_sell_rules(
     enabled: bool = None,
     stop_loss_percent: float = None,
@@ -2128,7 +2362,7 @@ async def update_auto_sell_rules(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/portfolio/paper/auto-sell/scan")
+@app.get("/portfolio/paper/auto-sell/scan", tags=["Paper Trading - Automation"])
 async def scan_portfolio_for_auto_sell():
     """
     Scan portfolio for positions that should be auto-sold.
@@ -2170,7 +2404,7 @@ async def scan_portfolio_for_auto_sell():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/portfolio/paper/auto-sell/execute")
+@app.post("/portfolio/paper/auto-sell/execute", tags=["Paper Trading - Automation"])
 async def execute_auto_sells():
     """
     Execute auto-sells for all triggered positions.
@@ -2230,7 +2464,7 @@ async def execute_auto_sells():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/portfolio/paper/auto-sell/alerts")
+@app.get("/portfolio/paper/auto-sell/alerts", tags=["Paper Trading - Automation"])
 async def get_auto_sell_alerts(limit: int = 50):
     """
     Get recent auto-sell alerts/triggers.
@@ -2251,6 +2485,190 @@ async def get_auto_sell_alerts(limit: int = 50):
 
     except Exception as e:
         logger.error(f"Get auto-sell alerts error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Unified Automated Trading Endpoint
+# ============================================================================
+
+@app.post("/portfolio/paper/auto-trade", tags=["Paper Trading - Automation"])
+async def execute_automated_trading(universe_limit: int = 50):
+    """
+    Execute full automated trading cycle: auto-sell existing positions, then auto-buy new opportunities.
+
+    This is the main endpoint for automated paper trading. It will:
+    1. Scan existing portfolio for sell signals (stop-loss, take-profit, downgraded AI ratings)
+    2. Execute auto-sells for triggered positions
+    3. Scan market for buy opportunities (STRONG BUY signals with high scores)
+    4. Execute auto-buys for qualified stocks
+
+    Returns:
+        Summary of all executed trades (both buys and sells)
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        from core.auto_buy_monitor import AutoBuyMonitor
+        from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
+
+        sell_monitor = AutoSellMonitor()
+        buy_monitor = AutoBuyMonitor()
+
+        # STEP 1: Execute auto-sells
+        executed_sells = []
+        if sell_monitor.get_rules()['enabled']:
+            portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+
+            # Get AI recommendations for owned positions
+            ai_recommendations = {}
+            for symbol in portfolio_with_prices.get('positions', {}).keys():
+                try:
+                    analysis_result = await analyze_single_stock(symbol)
+                    ai_recommendations[symbol] = analysis_result.get('recommendation', 'HOLD')
+                except:
+                    ai_recommendations[symbol] = 'HOLD'
+
+            # Scan and execute sells
+            positions_to_sell = sell_monitor.scan_portfolio(portfolio_with_prices, ai_recommendations)
+
+            for position in positions_to_sell:
+                symbol = position['symbol']
+                shares = position['shares']
+                current_price = position['current_price']
+
+                result = paper_portfolio.sell(symbol, shares, current_price)
+
+                if result['success']:
+                    executed_sells.append({
+                        'symbol': symbol,
+                        'shares': shares,
+                        'price': current_price,
+                        'reason': position['reason'],
+                        'trigger': position['trigger'],
+                        'pnl': result.get('pnl', 0),
+                        'pnl_percent': result.get('pnl_percent', 0)
+                    })
+
+        # STEP 2: Execute auto-buys
+        executed_buys = []
+        if buy_monitor.get_rules()['enabled']:
+            # Refresh portfolio after sells
+            portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+            portfolio_stats = paper_portfolio.get_stats()
+
+            portfolio_cash = portfolio_with_prices['cash']
+            portfolio_total_value = portfolio_stats['total_value']
+            num_positions = len(portfolio_with_prices.get('positions', {}))
+            owned_symbols = list(portfolio_with_prices.get('positions', {}).keys())
+
+            # Analyze stocks not currently owned
+            symbols_to_analyze = [s for s in US_TOP_100_STOCKS[:universe_limit] if s not in owned_symbols]
+
+            if symbols_to_analyze:
+                batch_request = BatchAnalysisRequest(symbols=symbols_to_analyze)
+                batch_result = await batch_analyze(batch_request)
+                analyses = batch_result["analyses"]
+
+                # Scan for opportunities
+                opportunities = buy_monitor.scan_opportunities(
+                    analyses=analyses,
+                    portfolio_cash=portfolio_cash,
+                    portfolio_total_value=portfolio_total_value,
+                    num_positions=num_positions,
+                    owned_symbols=owned_symbols,
+                    sector_mapping=SECTOR_MAPPING,
+                    portfolio_positions=portfolio_with_prices.get('positions', {})
+                )
+
+                # Execute buys
+                for opportunity in opportunities:
+                    symbol = opportunity['symbol']
+                    shares = opportunity['shares']
+                    price = opportunity['price']
+
+                    result = paper_portfolio.buy(symbol, shares, price)
+
+                    if result['success']:
+                        executed_buys.append({
+                            'symbol': symbol,
+                            'shares': shares,
+                            'price': price,
+                            'total_cost': opportunity['total_cost'],
+                            'reason': opportunity['reason'],
+                            'overall_score': opportunity['overall_score'],
+                            'recommendation': opportunity['recommendation'],
+                            'sector': opportunity.get('sector', 'Unknown')
+                        })
+
+        # Get final portfolio state
+        final_portfolio = paper_portfolio.get_portfolio_with_prices()
+        final_stats = paper_portfolio.get_stats()
+
+        return {
+            "success": True,
+            "summary": {
+                "sells_executed": len(executed_sells),
+                "buys_executed": len(executed_buys),
+                "total_trades": len(executed_sells) + len(executed_buys)
+            },
+            "executed_sells": executed_sells,
+            "executed_buys": executed_buys,
+            "portfolio": {
+                "cash": final_portfolio['cash'],
+                "num_positions": len(final_portfolio.get('positions', {})),
+                "total_value": final_stats['total_value'],
+                "total_return_percent": final_stats['total_return_percent']
+            },
+            "rules": {
+                "auto_sell": sell_monitor.get_rules(),
+                "auto_buy": buy_monitor.get_rules()
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Automated trading error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/auto-trade/status", tags=["Paper Trading - Automation"])
+async def get_automated_trading_status():
+    """
+    Get current automated trading configuration and status.
+
+    Returns both auto-buy and auto-sell rules, plus portfolio state.
+    """
+    try:
+        from core.auto_sell_monitor import AutoSellMonitor
+        from core.auto_buy_monitor import AutoBuyMonitor
+
+        sell_monitor = AutoSellMonitor()
+        buy_monitor = AutoBuyMonitor()
+
+        portfolio_with_prices = paper_portfolio.get_portfolio_with_prices()
+        portfolio_stats = paper_portfolio.get_stats()
+
+        return {
+            "success": True,
+            "automation_enabled": {
+                "auto_buy": buy_monitor.get_rules()['enabled'],
+                "auto_sell": sell_monitor.get_rules()['enabled'],
+                "fully_automated": buy_monitor.get_rules()['enabled'] and sell_monitor.get_rules()['enabled']
+            },
+            "rules": {
+                "auto_buy": buy_monitor.get_rules(),
+                "auto_sell": sell_monitor.get_rules()
+            },
+            "portfolio": {
+                "cash": portfolio_with_prices['cash'],
+                "num_positions": len(portfolio_with_prices.get('positions', {})),
+                "total_value": portfolio_stats['total_value'],
+                "total_return_percent": portfolio_stats['total_return_percent']
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Get automation status error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
