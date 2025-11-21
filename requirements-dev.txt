@@ -1,0 +1,40 @@
+# Development Dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include production requirements
+-r requirements.txt
+
+# Testing
+pytest==8.0.0
+pytest-cov==4.1.0
+pytest-asyncio==0.23.3
+pytest-mock==3.12.0
+httpx==0.26.0  # For testing FastAPI endpoints
+
+# Code Quality & Linting
+black==24.3.0
+isort==5.13.2
+flake8==7.0.0
+flake8-docstrings==1.7.0
+mypy==1.8.0
+
+# Security
+bandit==1.7.7
+safety==3.0.0
+
+# Pre-commit hooks
+pre-commit==3.6.0
+
+# Type stubs
+types-requests==2.31.0
+types-python-dateutil==2.8.19
+
+# Development tools
+ipython==8.21.0
+ipdb==0.13.13
+
+# API testing
+tavern==2.10.0
+
+# Load testing (optional)
+locust==2.20.0

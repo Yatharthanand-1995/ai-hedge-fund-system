@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { Shield, AlertTriangle, TrendingUp, TrendingDown, Activity, Target, DollarSign } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Shield, AlertTriangle, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 import { cn, formatCurrency, formatPercentage } from '../../utils';
 
 interface RiskMetric {
@@ -35,12 +35,6 @@ interface RiskManagementPanelProps {
   className?: string;
 }
 
-const RISK_COLORS = {
-  healthy: '#10b981',
-  warning: '#f59e0b',
-  critical: '#ef4444'
-};
-
 export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ className }) => {
   const [riskMetrics, setRiskMetrics] = useState<RiskMetric[]>([]);
   const [positionRisks, setPositionRisks] = useState<PositionRisk[]>([]);
@@ -74,7 +68,8 @@ export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ classN
 
         // Portfolio VaR based on score volatility
         const portfolioVar95 = (scoreStd / 10) + 1.5; // Scale to reasonable VaR values
-        const portfolioVar99 = portfolioVar95 * 1.5;
+        // portfolioVar99 calculated but not currently displayed
+        // const portfolioVar99 = portfolioVar95 * 1.5;
 
         // Portfolio Beta (simulated based on portfolio composition)
         const avgBeta = 1.1 + (avgScore - 60) * 0.01; // Higher scores = slightly higher beta
@@ -334,11 +329,12 @@ export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ classN
     );
   }
 
-  const riskDistribution = positionRisks.map(pos => ({
-    name: pos.symbol,
-    value: pos.allocation,
-    risk: pos.riskLevel
-  }));
+  // Risk distribution data - available for future charting features
+  // const riskDistribution = positionRisks.map(pos => ({
+  //   name: pos.symbol,
+  //   value: pos.allocation,
+  //   risk: pos.riskLevel
+  // }));
 
   return (
     <div className={cn('professional-card p-6', className)}>
@@ -367,7 +363,7 @@ export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ classN
 
       {/* Risk Metrics Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {riskMetrics.map((metric, index) => (
+        {riskMetrics.map((metric) => (
           <div key={metric.name} className="professional-card p-4 bg-muted/20">
             <div className="flex items-center justify-between mb-2">
               <div className={cn('flex items-center space-x-2', getStatusColor(metric.status))}>
@@ -485,7 +481,7 @@ export const RiskManagementPanel: React.FC<RiskManagementPanelProps> = ({ classN
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Stress Test Scenarios</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {scenarios.map((scenario, index) => (
+          {scenarios.map((scenario) => (
             <div key={scenario.name} className="professional-card p-4 bg-muted/20">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-medium text-foreground">{scenario.name}</h4>

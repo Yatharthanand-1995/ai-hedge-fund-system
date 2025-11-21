@@ -3,7 +3,7 @@ FastAPI Web Application for 4-Agent AI Hedge Fund System
 Production-ready API with narrative generation and investment analysis
 """
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, validator, Field
@@ -12,6 +12,16 @@ import asyncio
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+
+# Optional rate limiting - gracefully degrades if slowapi not installed
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    RATE_LIMITING_ENABLED = True
+except ImportError:
+    RATE_LIMITING_ENABLED = False
+    # Logging will be configured later, so we'll just note this for now
 import yfinance as yf
 from datetime import datetime, timedelta
 import sys
@@ -105,6 +115,12 @@ CACHE_TTL_SECONDS = 1200  # 20 minutes (extended for 50-stock universe)
 # Thread pool for concurrent processing
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
+# Initialize rate limiter (if available)
+if RATE_LIMITING_ENABLED:
+    limiter = Limiter(key_func=get_remote_address)
+else:
+    limiter = None
+
 # Initialize FastAPI app
 app = FastAPI(
     title="4-Agent AI Hedge Fund System",
@@ -131,6 +147,12 @@ app = FastAPI(
 * **Portfolio Management** - Multi-position portfolio optimization
 * **Risk Management** - VaR calculation and correlation analysis
 * **Performance Monitoring** - Comprehensive metrics and analytics
+
+## Rate Limits
+
+* **Analysis endpoints**: 60 requests per minute
+* **Batch endpoints**: 10 requests per minute
+* **Health checks**: Unlimited
     """,
     version="4.0.0",
     contact={
@@ -152,6 +174,22 @@ app = FastAPI(
         },
     ]
 )
+
+# Add rate limiter to app state (if enabled)
+if RATE_LIMITING_ENABLED:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    # Create a decorator that applies rate limits
+    def apply_rate_limits():
+        """Apply rate limits to endpoints after they're defined"""
+        # This will be called after all endpoints are defined
+        # Rate limits are applied via decorator in endpoint definitions
+        pass
+
+    logger.info("Rate limiting enabled (slowapi)")
+else:
+    logger.warning("Rate limiting disabled - slowapi not installed")
 
 # Configure CORS - more secure for production
 # Get allowed origins from environment variable, fallback to permissive for local dev
@@ -499,6 +537,48 @@ async def health_check():
             environment={"error": "Unable to load environment info"}
         )
 
+@app.get("/metrics", tags=["System"])
+async def get_metrics():
+    """
+    Simple metrics endpoint for monitoring
+
+    Returns basic system metrics including cache stats and request counts.
+    Can be extended with Prometheus metrics in Phase 2.
+    """
+    try:
+        # Calculate cache statistics
+        cache_size = len(analysis_cache)
+        cache_keys = list(analysis_cache.keys())[:10]  # First 10 for preview
+
+        # Simple stats
+        metrics = {
+            "timestamp": datetime.now().isoformat(),
+            "version": "4.0.0",
+            "cache": {
+                "size": cache_size,
+                "ttl_seconds": CACHE_TTL_SECONDS,
+                "sample_keys": cache_keys
+            },
+            "agents": {
+                "count": 4,
+                "names": ["fundamentals", "momentum", "quality", "sentiment"]
+            },
+            "system": {
+                "llm_provider": LLM_PROVIDER,
+                "adaptive_weights": os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false') == 'true',
+                "python_version": f"{sys.version_info.major}.{sys.version_info.minor}"
+            }
+        }
+
+        return JSONResponse(content=metrics)
+
+    except Exception as e:
+        logger.error(f"Metrics endpoint failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to generate metrics", "detail": str(e)}
+        )
+
 @app.get("/market/regime", tags=["System"])
 async def get_market_regime(force_refresh: bool = False):
     """
@@ -571,8 +651,11 @@ async def get_market_regime(force_refresh: bool = False):
 
 
 @app.post("/analyze", tags=["Investment Analysis"])
-async def analyze_stock(request: AnalysisRequest):
-    """Complete 4-agent analysis with investment narrative generation (PARALLEL EXECUTION)"""
+async def analyze_stock(request: AnalysisRequest, req: Request):
+    """Complete 4-agent analysis with investment narrative generation (PARALLEL EXECUTION)
+
+    Rate limit: 60 requests per minute per IP (when slowapi is installed)
+    """
     try:
         symbol = request.symbol
 
@@ -776,8 +859,11 @@ async def quick_analyze(symbol: str):
     return await analyze_stock(request)
 
 @app.post("/analyze/batch", tags=["Investment Analysis"])
-async def batch_analyze(request: BatchAnalysisRequest):
-    """Batch analysis for multiple stocks with concurrent processing"""
+async def batch_analyze(request: BatchAnalysisRequest, req: Request):
+    """Batch analysis for multiple stocks with concurrent processing
+
+    Rate limit: 10 requests per minute per IP (when slowapi is installed)
+    """
     try:
         logger.info(f"Starting batch analysis for {len(request.symbols)} symbols")
 

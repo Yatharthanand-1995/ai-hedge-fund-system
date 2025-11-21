@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Filter, X, ChevronDown, SortAsc, SortDesc, Search } from 'lucide-react';
+import { Filter, X, ChevronDown, Search } from 'lucide-react';
 import { cn } from '../../utils';
 import type { FilterOptions, SortOption } from '../../types/filters';
 

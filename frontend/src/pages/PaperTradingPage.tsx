@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { TrendingUp, TrendingDown, RefreshCw, Trash2, Clock, Sparkles, BarChart3, Shield, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, Trash2, Clock, Sparkles, BarChart3, Shield } from 'lucide-react';
 import { cn, formatCurrency } from '../utils';
 import { useToast } from '../components/common/Toast';
 import { AutoSellSettings } from '../components/AutoSellSettings';
@@ -57,14 +57,6 @@ interface TopPick {
     quality: number;
     sentiment: number;
   };
-}
-
-interface AutoSellRules {
-  enabled: boolean;
-  stop_loss_percent: number;
-  take_profit_percent: number;
-  watch_ai_signals: boolean;
-  max_position_age_days: number | null;
 }
 
 const API_BASE = 'http://localhost:8010';

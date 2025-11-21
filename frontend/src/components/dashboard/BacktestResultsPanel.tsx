@@ -38,6 +38,7 @@ interface BacktestConfig {
   rebalance_frequency: 'monthly' | 'quarterly';
   top_n: number;
   universe: string[];
+  initial_capital: number;
 }
 
 interface BacktestResultsPanelProps {
@@ -53,7 +54,8 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     end_date: '2024-01-01',
     rebalance_frequency: 'monthly',
     top_n: 10,
-    universe: []  // Empty array uses all 50 stocks from US_TOP_100_STOCKS by default
+    universe: [],  // Empty array uses all 50 stocks from US_TOP_100_STOCKS by default
+    initial_capital: 10000
   });
 
   useEffect(() => {
@@ -86,6 +88,8 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     }
   };
 
+  // Reserved for future mock data generation functionality
+  // @ts-ignore - Reserved for future use
   const generateEnhancedMockData = async (useBasicFallback = false): Promise<BacktestResult[]> => {
     try {
       if (!useBasicFallback) {
@@ -238,6 +242,8 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     }
   };
 
+  // Reserved for future config-based backtest generation functionality
+  // @ts-ignore - Reserved for future use
   const generateConfigBasedBacktest = async (config: BacktestConfig): Promise<BacktestResult> => {
     try {
       // Get real portfolio data for the backtest

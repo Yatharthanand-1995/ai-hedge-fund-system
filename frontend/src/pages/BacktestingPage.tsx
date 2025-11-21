@@ -12,7 +12,7 @@ import {
   Info,
   CheckCircle
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, formatCurrency, formatPercentage } from '../utils';
 
 interface BacktestConfig {
@@ -104,7 +104,7 @@ export const BacktestingPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
 
   // Load static backtest results from public folder
-  const { data: staticResult, isLoading: isLoadingStatic } = useQuery<BacktestResult>({
+  const { data: staticResult } = useQuery<BacktestResult>({
     queryKey: ['static-backtest'],
     queryFn: async () => {
       const response = await fetch('/static_backtest_result.json');
@@ -717,7 +717,7 @@ export const BacktestingPage: React.FC = () => {
                         // Calculate yearly performance from equity curve
                         const yearlyData: Record<number, any> = {};
 
-                        result.results.equity_curve.forEach((point, idx) => {
+                        result.results.equity_curve.forEach((point) => {
                           const year = new Date(point.date).getFullYear();
                           if (!yearlyData[year]) {
                             yearlyData[year] = {

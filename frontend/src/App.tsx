@@ -83,9 +83,45 @@ const queryClient = new QueryClient({
   },
 });
 
+// Define interface for top picks data
+interface TopPickData {
+  symbol: string;
+  company_name?: string;
+  sector: string;
+  overall_score: number;
+  recommendation: string;
+  confidence_level: string;
+  agent_scores: {
+    fundamentals: number;
+    momentum: number;
+    quality: number;
+    sentiment: number;
+  };
+  market_data: {
+    current_price: number;
+    price_change: number;
+    price_change_percent: number;
+    volume?: number;
+    market_cap?: number;
+  };
+  weight: number;
+  investment_thesis: string;
+  key_strengths: string[];
+  key_risks: string[];
+  nextAction: {
+    type: 'buy' | 'sell' | 'hold' | 'monitor';
+    urgency: 'high' | 'medium' | 'low';
+    description: string;
+    targetPrice?: number;
+    timeframe?: string;
+  };
+  momentum: 'bullish' | 'bearish' | 'neutral';
+  riskLevel: 'low' | 'medium' | 'high';
+}
+
 // Enhanced Professional Dashboard Component
 const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details') => void }> = ({ onPageChange }) => {
-  const [topPicks, setTopPicks] = useState<Array<Record<string, unknown>>>([]);
+  const [topPicks, setTopPicks] = useState<TopPickData[]>([]);
   const [isLoadingPicks, setIsLoadingPicks] = useState(true);
   const [filters, setFilters] = useState<FilterOptions>({
     sector: [],
@@ -105,22 +141,22 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
         const response = await fetch('http://localhost:8010/portfolio/top-picks?limit=12');
         if (response.ok) {
           const data = await response.json();
-          const enhancedPicks = data.top_picks?.map((pick: Record<string, unknown>) => ({
+          const enhancedPicks: TopPickData[] = (data.top_picks || []).map((pick: any) => ({
             ...pick,
             nextAction: {
-              type: (pick.overall_score as number) > 75 ? 'buy' : (pick.overall_score as number) < 50 ? 'sell' : 'hold',
-              urgency: (pick.overall_score as number) > 80 ? 'high' : (pick.overall_score as number) > 60 ? 'medium' : 'low',
-              description: (pick.overall_score as number) > 75
+              type: pick.overall_score > 75 ? 'buy' as const : pick.overall_score < 50 ? 'sell' as const : 'hold' as const,
+              urgency: pick.overall_score > 80 ? 'high' as const : pick.overall_score > 60 ? 'medium' as const : 'low' as const,
+              description: pick.overall_score > 75
                 ? 'Strong buy signal - Consider increasing position'
-                : (pick.overall_score as number) < 50
+                : pick.overall_score < 50
                 ? 'Weak performance - Consider reducing exposure'
                 : 'Monitor closely for trend changes',
-              targetPrice: ((pick.market_data as Record<string, number>).current_price * ((pick.overall_score as number) > 75 ? 1.1 : 0.9)),
+              targetPrice: pick.market_data.current_price * (pick.overall_score > 75 ? 1.1 : 0.9),
               timeframe: 'This Week'
             },
-            momentum: ((pick.agent_scores as Record<string, number>)?.momentum > 70 ? 'bullish' : (pick.agent_scores as Record<string, number>)?.momentum < 40 ? 'bearish' : 'neutral'),
-            riskLevel: pick.overall_score > 70 ? 'low' : pick.overall_score > 50 ? 'medium' : 'high'
-          })) || [];
+            momentum: pick.agent_scores?.momentum > 70 ? 'bullish' as const : pick.agent_scores?.momentum < 40 ? 'bearish' as const : 'neutral' as const,
+            riskLevel: pick.overall_score > 70 ? 'low' as const : pick.overall_score > 50 ? 'medium' as const : 'high' as const
+          }));
           setTopPicks(enhancedPicks);
         }
       } catch (error) {
@@ -132,8 +168,8 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
     fetchTopPicks();
   }, []);
 
-  const handleActionClick = (action: Record<string, unknown>, symbol: string) => {
-    console.log(`Action ${action.type} clicked for ${symbol}`, action);
+  const handleActionClick = (action: TopPickData['nextAction'], symbol: string) => {
+    console.log(`Action ${action?.type} clicked for ${symbol}`, action);
     // In a real app, this would trigger actual trading actions
   };
 

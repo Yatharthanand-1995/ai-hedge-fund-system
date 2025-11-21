@@ -130,6 +130,8 @@ config/api_keys.py
 *.env
 .env.local
 .env.production
+!.env.production.template
+!frontend/vercel.json
 
 # Data files
 data/cache/

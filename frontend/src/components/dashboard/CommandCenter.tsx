@@ -70,12 +70,12 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     }
   };
 
-  const generateActionItems = (topPicks: unknown[], summary: Record<string, unknown>): ActionItem[] => {
+  const generateActionItems = (topPicks: any[], summary: any): ActionItem[] => {
     const items: ActionItem[] = [];
     const now = new Date().toISOString();
 
     // Risk alerts (URGENT)
-    if (summary.riskLevel as string === 'high') {
+    if (summary.riskLevel === 'high') {
       items.push({
         id: 'risk-alert-1',
         type: 'urgent',
@@ -92,15 +92,15 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     }
 
     // Strong buy signals (IMPORTANT)
-    const strongBuys = topPicks.filter((pick: Record<string, unknown>) => (pick.overall_score as number) >= 75).slice(0, 2);
-    strongBuys.forEach((pick: Record<string, unknown>) => {
+    const strongBuys = topPicks.filter((pick: any) => pick.overall_score >= 75).slice(0, 2);
+    strongBuys.forEach((pick: any) => {
       items.push({
-        id: `buy-signal-${pick.symbol as string}`,
+        id: `buy-signal-${pick.symbol}`,
         type: 'important',
         category: 'buy_signal',
-        symbol: pick.symbol as string,
-        title: `🟢 Strong Buy Signal: ${pick.symbol as string}`,
-        description: `Score: ${(pick.overall_score as number).toFixed(1)} | Price: $${((pick.market_data as Record<string, number>).current_price).toFixed(2)} | High confidence opportunity`,
+        symbol: pick.symbol,
+        title: `🟢 Strong Buy Signal: ${pick.symbol}`,
+        description: `Score: ${pick.overall_score.toFixed(1)} | Price: $${pick.market_data.current_price.toFixed(2)} | High confidence opportunity`,
         action: {
           label: 'View Analysis',
           type: 'review',
@@ -111,18 +111,18 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     });
 
     // Price alerts - stocks near key levels (URGENT)
-    topPicks.slice(0, 5).forEach((pick: Record<string, unknown>) => {
-      const priceChange = ((pick.market_data as Record<string, number>).price_change_percent || 0);
+    topPicks.slice(0, 5).forEach((pick: any) => {
+      const priceChange = pick.market_data.price_change_percent || 0;
 
       // Large price movement
       if (Math.abs(priceChange) >= 5) {
         items.push({
-          id: `price-alert-${pick.symbol as string}`,
+          id: `price-alert-${pick.symbol}`,
           type: 'urgent',
           category: 'price_alert',
-          symbol: pick.symbol as string,
-          title: `📊 ${pick.symbol as string} Major Move: ${priceChange > 0 ? '↑' : '↓'}${Math.abs(priceChange).toFixed(1)}%`,
-          description: `${pick.symbol as string} moved significantly. Current: $${((pick.market_data as Record<string, number>).current_price).toFixed(2)}. Review position.`,
+          symbol: pick.symbol,
+          title: `📊 ${pick.symbol} Major Move: ${priceChange > 0 ? '↑' : '↓'}${Math.abs(priceChange).toFixed(1)}%`,
+          description: `${pick.symbol} moved significantly. Current: $${pick.market_data.current_price.toFixed(2)}. Review position.`,
           action: {
             label: 'Check Details',
             type: 'review',
@@ -134,15 +134,15 @@ export const CommandCenter: React.FC<CommandCenterProps> = ({ className, onPageC
     });
 
     // Weak performers (sell signals)
-    const weakPerformers = topPicks.filter((pick: Record<string, unknown>) => (pick.overall_score as number) < 50).slice(0, 2);
-    weakPerformers.forEach((pick: Record<string, unknown>) => {
+    const weakPerformers = topPicks.filter((pick: any) => pick.overall_score < 50).slice(0, 2);
+    weakPerformers.forEach((pick: any) => {
       items.push({
-        id: `sell-signal-${pick.symbol as string}`,
+        id: `sell-signal-${pick.symbol}`,
         type: 'important',
         category: 'sell_signal',
-        symbol: pick.symbol as string,
-        title: `🔴 Weak Performance: ${pick.symbol as string}`,
-        description: `Score: ${(pick.overall_score as number).toFixed(1)} | Consider reducing exposure or exiting position`,
+        symbol: pick.symbol,
+        title: `🔴 Weak Performance: ${pick.symbol}`,
+        description: `Score: ${pick.overall_score.toFixed(1)} | Consider reducing exposure or exiting position`,
         action: {
           label: 'Review Position',
           type: 'review',

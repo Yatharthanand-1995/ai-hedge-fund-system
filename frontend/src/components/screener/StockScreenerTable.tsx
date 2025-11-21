@@ -39,7 +39,7 @@ interface StockScreenerTableProps {
   onRowClick?: (stock: Stock) => void;
 }
 
-export const StockScreenerTable: React.FC<StockScreenerTableProps> = ({ stocks, onRowClick }) => {
+export const StockScreenerTable: React.FC<StockScreenerTableProps> = ({ stocks }) => {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const toggleRow = (symbol: string) => {

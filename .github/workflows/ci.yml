@@ -1,0 +1,182 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # Backend Python Tests
+  backend-tests:
+    name: Backend Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install TA-Lib (system dependency)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential wget
+        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+        tar -xzf ta-lib-0.4.0-src.tar.gz
+        cd ta-lib/
+        ./configure --prefix=/usr
+        make
+        sudo make install
+        sudo ldconfig
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        # Stop build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      continue-on-error: true
+
+    - name: Check code formatting with black
+      run: |
+        pip install black
+        black --check . --exclude '/(\.git|\.venv|venv|build|dist)/'
+      continue-on-error: true
+
+    - name: Test imports (smoke test)
+      run: |
+        python -c "from api.main import app; print(f'✅ API loaded: {app.title}')"
+
+    - name: Run pytest (if tests exist)
+      run: |
+        if [ -d "tests" ]; then
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=term
+        else
+          echo "No tests directory found, skipping pytest"
+        fi
+      continue-on-error: true
+
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.13'
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+      continue-on-error: true
+
+  # Frontend TypeScript/React Tests
+  frontend-tests:
+    name: Frontend Tests (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18.x', '20.x', '22.x']
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint with ESLint
+      run: npm run lint
+      continue-on-error: true
+
+    - name: Type check with TypeScript
+      run: npx tsc --noEmit
+      continue-on-error: true
+
+    - name: Build frontend
+      run: npm run build
+      env:
+        VITE_API_URL: https://example.com
+
+    - name: Run tests (if they exist)
+      run: npm test -- --passWithNoTests
+      continue-on-error: true
+
+  # Security Scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+      continue-on-error: true
+
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+      continue-on-error: true
+
+    - name: Check for secrets with Gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+
+  # Deployment Check (doesn't actually deploy, just validates)
+  deployment-check:
+    name: Deployment Readiness Check
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check deployment files exist
+      run: |
+        echo "✅ Checking deployment configuration files..."
+        test -f railway.toml && echo "✅ railway.toml found" || echo "❌ railway.toml missing"
+        test -f render.yaml && echo "✅ render.yaml found" || echo "❌ render.yaml missing"
+        test -f frontend/vercel.json && echo "✅ frontend/vercel.json found" || echo "❌ frontend/vercel.json missing"
+        test -f DEPLOYMENT.md && echo "✅ DEPLOYMENT.md found" || echo "❌ DEPLOYMENT.md missing"
+        test -f .env.production.template && echo "✅ .env.production.template found" || echo "❌ .env.production.template missing"
+
+    - name: Validate JSON configs
+      run: |
+        if [ -f frontend/vercel.json ]; then
+          python -m json.tool frontend/vercel.json > /dev/null && echo "✅ vercel.json is valid JSON"
+        fi
+
+    - name: Check for required environment variables in template
+      run: |
+        grep -q "LLM_PROVIDER" .env.production.template && echo "✅ LLM_PROVIDER documented"
+        grep -q "ALLOWED_ORIGINS" .env.production.template && echo "✅ ALLOWED_ORIGINS documented"
+        grep -q "VITE_API_URL" .env.production.template && echo "✅ VITE_API_URL documented"

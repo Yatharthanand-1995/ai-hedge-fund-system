@@ -1,0 +1,9 @@
+[bandit]
+# Bandit security configuration
+exclude_dirs = /tests/,/venv/,/.venv/,/build/,/dist/
+
+# Skip specific tests
+skips = B101,B601
+
+# B101: Assert used - we use assert in tests
+# B601: Paramiko usage - if we add SSH features
