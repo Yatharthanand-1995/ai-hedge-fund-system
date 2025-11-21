@@ -1,0 +1,19 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "pip install -r requirements.txt"
+
+[deploy]
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[env]
+# Railway will automatically provide PORT
+# Add these environment variables in Railway dashboard:
+# - GEMINI_API_KEY (or OPENAI_API_KEY or ANTHROPIC_API_KEY)
+# - LLM_PROVIDER (default: gemini)
+# - ENABLE_ADAPTIVE_WEIGHTS (optional: true/false)
+# - NEWS_API_KEY (optional)
+PYTHON_VERSION = "3.13"
