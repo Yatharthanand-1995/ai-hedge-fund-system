@@ -153,12 +153,21 @@ app = FastAPI(
     ]
 )
 
-# Add CORS middleware
+# Configure CORS - more secure for production
+# Get allowed origins from environment variable, fallback to permissive for local dev
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*')
+if ALLOWED_ORIGINS != '*':
+    # Split comma-separated origins from environment
+    allowed_origins_list = [origin.strip() for origin in ALLOWED_ORIGINS.split(',')]
+else:
+    # Development mode - allow all
+    allowed_origins_list = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -302,6 +311,7 @@ class HealthResponse(BaseModel):
     timestamp: str
     version: str
     agents_status: Dict[str, str]
+    environment: Optional[Dict] = None
 
 # API Routes
 @app.get("/", response_class=HTMLResponse)
@@ -406,7 +416,21 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
-    """Health check endpoint - verify all agents are operational"""
+    """
+    Health check endpoint - verify all agents are operational
+
+    Returns:
+    - **status**: Overall system health (healthy/degraded/unhealthy)
+    - **timestamp**: Current server time (ISO format)
+    - **version**: API version
+    - **agents_status**: Individual agent health status
+    - **environment**: Deployment environment info
+
+    System is considered:
+    - **healthy**: 3+ agents operational
+    - **degraded**: 2 agents operational
+    - **unhealthy**: <2 agents operational
+    """
     try:
         # Test each agent
         agents_status = {}
@@ -420,6 +444,7 @@ async def health_check():
             agents_status["fundamentals"] = "healthy" if fund_result.get('score', 0) > 0 else "degraded"
         except Exception as e:
             agents_status["fundamentals"] = "unhealthy"
+            logger.warning(f"Fundamentals agent health check failed: {e}")
 
         # Test Momentum Agent
         try:
@@ -427,6 +452,7 @@ async def health_check():
             agents_status["momentum"] = "healthy" if momentum_result.get('score', 0) >= 0 else "degraded"
         except Exception as e:
             agents_status["momentum"] = "unhealthy"
+            logger.warning(f"Momentum agent health check failed: {e}")
 
         # Test Quality Agent
         try:
@@ -434,6 +460,7 @@ async def health_check():
             agents_status["quality"] = "healthy" if quality_result.get('score', 0) > 0 else "degraded"
         except Exception as e:
             agents_status["quality"] = "unhealthy"
+            logger.warning(f"Quality agent health check failed: {e}")
 
         # Test Sentiment Agent
         try:
@@ -441,16 +468,25 @@ async def health_check():
             agents_status["sentiment"] = "healthy" if sentiment_result.get('score', 0) >= 0 else "degraded"
         except Exception as e:
             agents_status["sentiment"] = "unhealthy"
+            logger.warning(f"Sentiment agent health check failed: {e}")
 
         # Overall status
         healthy_agents = sum(1 for status in agents_status.values() if status == "healthy")
         overall_status = "healthy" if healthy_agents >= 3 else "degraded" if healthy_agents >= 2 else "unhealthy"
 
+        # Add environment info for monitoring
+        environment_info = {
+            "llm_provider": LLM_PROVIDER,
+            "adaptive_weights_enabled": os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false') == 'true',
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        }
+
         return HealthResponse(
             status=overall_status,
             timestamp=datetime.now().isoformat(),
             version="4.0.0",
-            agents_status=agents_status
+            agents_status=agents_status,
+            environment=environment_info
         )
 
     except Exception as e:
@@ -459,7 +495,8 @@ async def health_check():
             status="unhealthy",
             timestamp=datetime.now().isoformat(),
             version="4.0.0",
-            agents_status={"error": str(e)}
+            agents_status={"error": str(e)},
+            environment={"error": "Unable to load environment info"}
         )
 
 @app.get("/market/regime", tags=["System"])
