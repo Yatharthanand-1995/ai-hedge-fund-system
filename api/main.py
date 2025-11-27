@@ -37,6 +37,38 @@ import concurrent.futures
 from dotenv import load_dotenv
 load_dotenv()  # Load .env file from project root
 
+# Optional Sentry error tracking - gracefully degrades if not configured
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_dsn = os.getenv('SENTRY_DSN')
+    if sentry_dsn:
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            environment=os.getenv('ENVIRONMENT', 'development'),
+            traces_sample_rate=0.1,  # 10% of transactions for performance monitoring
+            profiles_sample_rate=0.1,  # 10% for profiling
+            integrations=[
+                FastApiIntegration(transaction_style="endpoint"),
+                LoggingIntegration(
+                    level=logging.INFO,  # Capture info and above
+                    event_level=logging.ERROR  # Send errors to Sentry
+                ),
+            ],
+            # Filter out sensitive data
+            before_send=lambda event, hint: event if not any(
+                keyword in str(event).lower()
+                for keyword in ['api_key', 'password', 'token', 'secret']
+            ) else None,
+        )
+        SENTRY_ENABLED = True
+    else:
+        SENTRY_ENABLED = False
+except ImportError:
+    SENTRY_ENABLED = False
+
 # Add the root project directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -516,7 +548,9 @@ async def health_check():
         environment_info = {
             "llm_provider": LLM_PROVIDER,
             "adaptive_weights_enabled": os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false') == 'true',
-            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "sentry_enabled": SENTRY_ENABLED,
+            "rate_limiting_enabled": RATE_LIMITING_ENABLED
         }
 
         return HealthResponse(
