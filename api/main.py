@@ -1754,15 +1754,16 @@ async def get_backtest_history(limit: int = 10):
         from data.backtest_storage import get_backtest_storage
 
         storage = get_backtest_storage()
-        stored_results = storage.get_all_results(limit=limit)
+        # Use get_full_results() to return complete backtest data with config and results
+        stored_results = storage.get_full_results(limit=limit)
 
         # If no stored results, return empty list with helpful message
         if not stored_results:
             logger.info("No backtest history found - returning empty list")
             return []
 
-        # Return stored results directly (they're already in the correct format from index)
-        logger.info(f"✅ Returning {len(stored_results)} stored backtest results")
+        # Return stored results directly (they include full config and results objects)
+        logger.info(f"✅ Returning {len(stored_results)} full backtest results")
         return stored_results
 
     except Exception as e:

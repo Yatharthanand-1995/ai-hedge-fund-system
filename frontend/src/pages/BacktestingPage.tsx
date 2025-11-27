@@ -101,7 +101,8 @@ const BACKTEST_CONFIG: BacktestConfig = {
 };
 
 export const BacktestingPage: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
+  const [viewMode, setViewMode] = useState<'overview' | 'detailed' | 'history'>('overview');
+  const [selectedHistoricalResult, setSelectedHistoricalResult] = useState<BacktestResult | null>(null);
 
   // Load static backtest results from public folder
   const { data: staticResult } = useQuery<BacktestResult>({
@@ -140,6 +141,20 @@ export const BacktestingPage: React.FC = () => {
     gcTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+  });
+
+  // Fetch historical backtest results
+  const { data: historicalResults = [], isLoading: isLoadingHistory } = useQuery<BacktestResult[]>({
+    queryKey: ['backtest-history'],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:8010/backtest/history?limit=20');
+      if (!response.ok) {
+        throw new Error('Failed to fetch backtest history');
+      }
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   // Use static data by default, API result if available (API overrides static)
@@ -515,6 +530,17 @@ export const BacktestingPage: React.FC = () => {
               )}
             >
               Detailed Analysis
+            </button>
+            <button
+              onClick={() => setViewMode('history')}
+              className={cn(
+                'px-4 py-2 font-medium transition-colors border-b-2',
+                viewMode === 'history'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Historical Results ({historicalResults.length})
             </button>
           </div>
 
@@ -1117,6 +1143,266 @@ export const BacktestingPage: React.FC = () => {
                     <div className="text-xs text-muted-foreground mt-1">Wins/Losses ratio</div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Historical Results Mode */}
+          {viewMode === 'history' && (
+            <div className="space-y-8">
+              <div className="professional-card p-6">
+                <h2 className="text-2xl font-bold text-foreground mb-4">📚 Historical Backtest Results</h2>
+                <p className="text-sm text-muted-foreground mb-6">
+                  View all previously run backtests. Click on any result to view detailed analysis.
+                </p>
+
+                {isLoadingHistory ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-8 w-8 animate-spin text-accent" />
+                    <span className="ml-3 text-lg">Loading historical results...</span>
+                  </div>
+                ) : historicalResults.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Info className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No historical backtest results found.</p>
+                    <p className="text-sm text-muted-foreground mt-2">Run a backtest to create your first result.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b-2 border-border bg-muted/30">
+                            <th className="text-left py-3 px-4 font-semibold">Run Date</th>
+                            <th className="text-left py-3 px-4 font-semibold">Period</th>
+                            <th className="text-right py-3 px-4 font-semibold">Total Return</th>
+                            <th className="text-right py-3 px-4 font-semibold">CAGR</th>
+                            <th className="text-right py-3 px-4 font-semibold">Sharpe</th>
+                            <th className="text-right py-3 px-4 font-semibold">Max DD</th>
+                            <th className="text-right py-3 px-4 font-semibold">vs SPY</th>
+                            <th className="text-right py-3 px-4 font-semibold">Win Rate</th>
+                            <th className="text-center py-3 px-4 font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historicalResults.map((histResult, idx) => {
+                            const isSelected = selectedHistoricalResult?.timestamp === histResult.timestamp;
+                            // Handle both old and new format (metrics might be nested or at top level)
+                            const metrics = histResult.results.metrics || histResult.results;
+                            const sharpe = metrics.sharpe_ratio ?? 0;
+                            const maxDD = metrics.max_drawdown ?? 0;
+                            const cagr = metrics.cagr ?? histResult.results.cagr ?? 0;
+                            const totalReturn = histResult.results.total_return ?? 0;
+                            const outperformance = Array.isArray(histResult.results.outperformance_vs_spy)
+                              ? histResult.results.outperformance_vs_spy[0]
+                              : histResult.results.outperformance_vs_spy ?? 0;
+                            const winRate = histResult.results.win_rate ?? 0.5;
+
+                            return (
+                              <React.Fragment key={histResult.timestamp}>
+                                <tr
+                                  className={cn(
+                                    "border-b border-border hover:bg-muted/20 cursor-pointer transition-colors",
+                                    isSelected && "bg-accent/10"
+                                  )}
+                                  onClick={() => setSelectedHistoricalResult(isSelected ? null : histResult)}
+                                >
+                                  <td className="py-3 px-4 text-xs text-muted-foreground">
+                                    {new Date(histResult.timestamp).toLocaleString()}
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <div className="text-xs">
+                                      <div>{new Date(histResult.config.start_date).toLocaleDateString()}</div>
+                                      <div className="text-muted-foreground">to {new Date(histResult.config.end_date).toLocaleDateString()}</div>
+                                    </div>
+                                  </td>
+                                  <td className={cn(
+                                    "py-3 px-4 text-right font-semibold",
+                                    totalReturn >= 0 ? "text-green-600" : "text-red-600"
+                                  )}>
+                                    {formatPercentage(totalReturn * 100)}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-medium">
+                                    {formatPercentage(cagr * 100)}
+                                  </td>
+                                  <td className={cn(
+                                    "py-3 px-4 text-right font-medium",
+                                    sharpe >= 1.5 ? "text-green-600" :
+                                    sharpe >= 1.0 ? "text-yellow-600" :
+                                    "text-red-600"
+                                  )}>
+                                    {sharpe.toFixed(2)}
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-red-600 font-medium">
+                                    {formatPercentage(maxDD * 100)}
+                                  </td>
+                                  <td className={cn(
+                                    "py-3 px-4 text-right font-semibold",
+                                    outperformance >= 0 ? "text-green-600" : "text-red-600"
+                                  )}>
+                                    {formatPercentage(outperformance * 100)}
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
+                                    {formatPercentage(winRate * 100)}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedHistoricalResult(isSelected ? null : histResult);
+                                      }}
+                                      className="text-accent hover:text-accent-foreground text-xs underline"
+                                    >
+                                      {isSelected ? 'Hide' : 'View'} Details
+                                    </button>
+                                  </td>
+                                </tr>
+
+                                {/* Expanded Details Row */}
+                                {isSelected && (
+                                  <tr className="bg-accent/5">
+                                    <td colSpan={9} className="p-6">
+                                      <div className="space-y-6">
+                                        {/* Key Metrics */}
+                                        <div>
+                                          <h3 className="text-lg font-semibold mb-4">Key Metrics</h3>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Initial Capital</div>
+                                              <div className="text-lg font-semibold">{formatCurrency(histResult.results.initial_capital)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Final Value</div>
+                                              <div className="text-lg font-semibold">{formatCurrency(histResult.results.final_value)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Sortino Ratio</div>
+                                              <div className="text-lg font-semibold">{((metrics.sortino_ratio || histResult.results.sortino_ratio) ?? 0).toFixed(2)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Calmar Ratio</div>
+                                              <div className="text-lg font-semibold">{((metrics.calmar_ratio || histResult.results.calmar_ratio) ?? 0).toFixed(2)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Volatility</div>
+                                              <div className="text-lg font-semibold">{formatPercentage(((metrics.volatility || histResult.results.volatility) ?? 0) * 100)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Alpha</div>
+                                              <div className="text-lg font-semibold text-green-600">{formatPercentage(((metrics.alpha || histResult.results.alpha) ?? 0) * 100)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Beta</div>
+                                              <div className="text-lg font-semibold">{((metrics.beta || histResult.results.beta) ?? 0).toFixed(2)}</div>
+                                            </div>
+                                            <div className="bg-white/60 p-3 rounded">
+                                              <div className="text-xs text-muted-foreground">Rebalances</div>
+                                              <div className="text-lg font-semibold">{histResult.results.rebalances || histResult.results.num_rebalances || 0}</div>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Configuration */}
+                                        <div>
+                                          <h3 className="text-lg font-semibold mb-4">Configuration</h3>
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                            <div>
+                                              <span className="text-muted-foreground">Frequency:</span>
+                                              <span className="ml-2 font-semibold capitalize">{histResult.config.rebalance_frequency}</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Portfolio Size:</span>
+                                              <span className="ml-2 font-semibold">Top {histResult.config.top_n}</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Universe:</span>
+                                              <span className="ml-2 font-semibold">{histResult.config.universe.length} stocks</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Duration:</span>
+                                              <span className="ml-2 font-semibold">
+                                                {Math.round((new Date(histResult.config.end_date).getTime() - new Date(histResult.config.start_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000) * 10) / 10} years
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Equity Curve */}
+                                        <div>
+                                          <h3 className="text-lg font-semibold mb-4">Portfolio Growth</h3>
+                                          <div className="h-64 bg-white/60 rounded p-4">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                              <LineChart data={histResult.results.equity_curve}>
+                                                <XAxis
+                                                  dataKey="date"
+                                                  tick={{ fontSize: 10 }}
+                                                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                                                />
+                                                <YAxis
+                                                  tick={{ fontSize: 10 }}
+                                                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                                                />
+                                                <Tooltip
+                                                  formatter={(value: any) => [formatCurrency(value), 'Value']}
+                                                  labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                                                />
+                                                <Line
+                                                  type="monotone"
+                                                  dataKey="value"
+                                                  stroke="#0088FE"
+                                                  strokeWidth={2}
+                                                  dot={false}
+                                                />
+                                              </LineChart>
+                                            </ResponsiveContainer>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Summary Stats */}
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                      <h3 className="font-semibold text-blue-900 mb-2">Historical Performance Summary</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-blue-700">Total Backtests:</span>
+                          <span className="ml-2 font-semibold text-blue-900">{historicalResults.length}</span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Avg Return:</span>
+                          <span className="ml-2 font-semibold text-blue-900">
+                            {formatPercentage(
+                              (historicalResults.reduce((sum, r) => sum + (r.results.total_return ?? 0), 0) / historicalResults.length) * 100
+                            )}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Avg Sharpe:</span>
+                          <span className="ml-2 font-semibold text-blue-900">
+                            {(historicalResults.reduce((sum, r) => {
+                              const metrics = r.results.metrics || r.results;
+                              return sum + (metrics.sharpe_ratio ?? 0);
+                            }, 0) / historicalResults.length).toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Best Return:</span>
+                          <span className="ml-2 font-semibold text-green-600">
+                            {formatPercentage(Math.max(...historicalResults.map(r => r.results.total_return ?? 0)) * 100)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
