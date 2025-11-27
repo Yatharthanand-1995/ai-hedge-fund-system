@@ -9,6 +9,7 @@ import { PortfolioPage } from './pages/PortfolioPage';
 import { BacktestingPage } from './pages/BacktestingPage';
 import { PaperTradingPage } from './pages/PaperTradingPage';
 import SystemDetailsPage from './pages/SystemDetailsPage';
+import AlertsPage from './pages/AlertsPage';
 import { IntelligentStockCard } from './components/dashboard/IntelligentStockCard';
 import { SectorAllocationPanel } from './components/dashboard/SectorAllocationPanel';
 import { MultiAgentConsensusPanel } from './components/dashboard/MultiAgentConsensusPanel';
@@ -440,6 +441,11 @@ function App() {
               {currentPage === 'system-details' && (
                 <ErrorBoundary>
                   <SystemDetailsPage />
+                </ErrorBoundary>
+              )}
+              {currentPage === 'alerts' && (
+                <ErrorBoundary>
+                  <AlertsPage />
                 </ErrorBoundary>
               )}
             </div>

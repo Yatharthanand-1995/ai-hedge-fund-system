@@ -2829,6 +2829,134 @@ async def get_automated_trading_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ===================================================================
+# SYSTEM ALERTS & MONITORING
+# ===================================================================
+
+from utils.alerts_manager import get_alerts_manager
+
+alerts_manager = get_alerts_manager()
+
+
+@app.get("/alerts", tags=["System Monitoring"])
+async def get_alerts(
+    limit: int = 50,
+    level: Optional[str] = None,
+    category: Optional[str] = None,
+    unread_only: bool = False
+):
+    """
+    Get system alerts for internal monitoring dashboard
+
+    Args:
+        limit: Maximum number of alerts to return (default 50, max 100)
+        level: Filter by level (error, warning, info, success)
+        category: Filter by category (api, agent, system, performance)
+        unread_only: Only return unread alerts
+
+    Returns:
+        List of alerts with metadata
+    """
+    try:
+        limit = min(limit, 100)  # Cap at 100
+        alerts = alerts_manager.get_alerts(
+            limit=limit,
+            level=level,
+            category=category,
+            unread_only=unread_only
+        )
+
+        return {
+            "alerts": alerts,
+            "count": len(alerts),
+            "has_more": len(alerts_manager.alerts) > limit
+        }
+
+    except Exception as e:
+        logger.error(f"Get alerts error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/alerts/stats", tags=["System Monitoring"])
+async def get_alerts_stats():
+    """
+    Get alert statistics for dashboard overview
+
+    Returns:
+        Alert counts and statistics
+    """
+    try:
+        stats = alerts_manager.get_stats()
+        return stats
+
+    except Exception as e:
+        logger.error(f"Get alerts stats error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/alerts/{alert_id}/read", tags=["System Monitoring"])
+async def mark_alert_read(alert_id: str):
+    """
+    Mark a specific alert as read
+
+    Args:
+        alert_id: ID of the alert to mark as read
+
+    Returns:
+        Success status
+    """
+    try:
+        success = alerts_manager.mark_read(alert_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Alert not found")
+
+        return {"success": True, "message": "Alert marked as read"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Mark alert read error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/alerts/read-all", tags=["System Monitoring"])
+async def mark_all_alerts_read():
+    """
+    Mark all alerts as read
+
+    Returns:
+        Number of alerts marked as read
+    """
+    try:
+        count = alerts_manager.mark_all_read()
+
+        return {
+            "success": True,
+            "count": count,
+            "message": f"Marked {count} alerts as read"
+        }
+
+    except Exception as e:
+        logger.error(f"Mark all alerts read error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Add sample alerts on startup for demonstration
+def add_sample_alerts():
+    """Add some sample alerts for demonstration"""
+    alerts_manager.add_alert(
+        level="info",
+        category="system",
+        message="System started successfully",
+        details={"version": "4.0.0"},
+        source="startup"
+    )
+
+    # Log successful startups
+    logger.info("✅ Alerts system initialized")
+
+
 @app.on_event("startup")
 async def startup_event():
     """Startup event"""
@@ -2838,6 +2966,9 @@ async def startup_event():
     logger.info("✅ Portfolio manager ready")
     logger.info("✅ Auto-sell monitor ready")
     logger.info("✅ API endpoints configured")
+
+    # Initialize alerts system
+    add_sample_alerts()
 
 @app.on_event("shutdown")
 async def shutdown_event():

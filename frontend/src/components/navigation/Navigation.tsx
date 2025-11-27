@@ -5,8 +5,8 @@ import { FeatureFlagsPanel } from '../settings/FeatureFlagsPanel';
 import { hasExperimentalFeatures } from '../../config/featureFlags';
 
 interface NavigationProps {
-  currentPage: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details';
-  onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details') => void;
+  currentPage: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts';
+  onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts') => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -23,7 +23,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'portfolio' as const, label: 'Portfolio Manager', icon: '📈', shortcut: '3' },
     { id: 'backtesting' as const, label: '5-Year Backtest', icon: '📉', shortcut: '4' },
     { id: 'paper-trading' as const, label: 'Paper Trading', icon: '💵', shortcut: '5' },
-    { id: 'system-details' as const, label: 'System Details', icon: '📚', shortcut: '6' },
+    { id: 'alerts' as const, label: 'System Alerts', icon: '🔔', shortcut: '6' },
+    { id: 'system-details' as const, label: 'System Details', icon: '📚', shortcut: '7' },
   ];
 
   // Keyboard navigation support
