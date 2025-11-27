@@ -651,7 +651,7 @@ async def get_market_regime(force_refresh: bool = False):
 
 
 @app.post("/analyze", tags=["Investment Analysis"])
-async def analyze_stock(request: AnalysisRequest, req: Request):
+async def analyze_stock(request: AnalysisRequest, req: Request = None):
     """Complete 4-agent analysis with investment narrative generation (PARALLEL EXECUTION)
 
     Rate limit: 60 requests per minute per IP (when slowapi is installed)
@@ -859,7 +859,7 @@ async def quick_analyze(symbol: str):
     return await analyze_stock(request)
 
 @app.post("/analyze/batch", tags=["Investment Analysis"])
-async def batch_analyze(request: BatchAnalysisRequest, req: Request):
+async def batch_analyze(request: BatchAnalysisRequest, req: Request = None):
     """Batch analysis for multiple stocks with concurrent processing
 
     Rate limit: 10 requests per minute per IP (when slowapi is installed)

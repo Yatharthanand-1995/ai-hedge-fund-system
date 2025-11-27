@@ -12,7 +12,7 @@ import {
 } from '../types/api';
 
 // API Configuration
-const API_BASE_URL = 'http://localhost:8010';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8010';
 
 // Create axios instance with default config
 export const apiClient = axios.create({
