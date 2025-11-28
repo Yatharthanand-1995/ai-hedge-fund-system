@@ -10,6 +10,7 @@ import logging
 import os
 
 from agents import FundamentalsAgent, MomentumAgent, QualityAgent, SentimentAgent
+from agents.institutional_flow_agent import InstitutionalFlowAgent
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,11 @@ class StockScorer:
     Combines all agent scores to rank stocks
 
     Agent Weights (Default - Static):
-    - Fundamentals: 40%
-    - Momentum: 30%
-    - Quality: 20%
-    - Sentiment: 10%
+    - Fundamentals: 36%
+    - Momentum: 27%
+    - Quality: 18%
+    - Sentiment: 9%
+    - Institutional Flow: 10%
 
     With Adaptive Weights (ENABLE_ADAPTIVE_WEIGHTS=true):
     - Weights automatically adjust based on market regime
@@ -37,13 +39,15 @@ class StockScorer:
         self.momentum_agent = MomentumAgent()
         self.quality_agent = QualityAgent(sector_mapping=sector_mapping)
         self.sentiment_agent = SentimentAgent()
+        self.institutional_flow_agent = InstitutionalFlowAgent()
 
-        # Default static weights
+        # Default static weights (5-agent system)
         self.default_weights = {
-            'fundamentals': 0.40,
-            'momentum': 0.30,
-            'quality': 0.20,
-            'sentiment': 0.10
+            'fundamentals': 0.36,
+            'momentum': 0.27,
+            'quality': 0.18,
+            'sentiment': 0.09,
+            'institutional_flow': 0.10
         }
 
         # Determine if adaptive weights should be used
@@ -71,9 +75,9 @@ class StockScorer:
                 logger.warning(f"Failed to initialize adaptive weights: {e}. Using static weights.")
                 self.use_adaptive_weights = False
         else:
-            logger.info("Using static agent weights (40/30/20/10)")
+            logger.info("Using static agent weights (36/27/18/9/10)")
 
-        logger.info(f"StockScorer initialized with 4 agents (weights: {self.weights})")
+        logger.info(f"StockScorer initialized with 5 agents (weights: {self.weights})")
 
     def score_stock(self, symbol: str, price_data: Optional[pd.DataFrame] = None,
                    spy_data: Optional[pd.DataFrame] = None,
@@ -118,13 +122,15 @@ class StockScorer:
             mom_result = self.momentum_agent.analyze(symbol, price_data, spy_data)
             qual_result = self.quality_agent.analyze(symbol, price_data)
             sent_result = self.sentiment_agent.analyze(symbol, cached_data=cached_data)
+            flow_result = self.institutional_flow_agent.analyze(symbol, price_data, cached_data=cached_data)
 
             # Calculate weighted composite score using current weights
             composite_score = (
                 current_weights['fundamentals'] * fund_result['score'] +
                 current_weights['momentum'] * mom_result['score'] +
                 current_weights['quality'] * qual_result['score'] +
-                current_weights['sentiment'] * sent_result['score']
+                current_weights['sentiment'] * sent_result['score'] +
+                current_weights['institutional_flow'] * flow_result['score']
             )
 
             # Composite confidence (weighted average of confidences)
@@ -132,7 +138,8 @@ class StockScorer:
                 current_weights['fundamentals'] * fund_result['confidence'] +
                 current_weights['momentum'] * mom_result['confidence'] +
                 current_weights['quality'] * qual_result['confidence'] +
-                current_weights['sentiment'] * sent_result['confidence']
+                current_weights['sentiment'] * sent_result['confidence'] +
+                current_weights['institutional_flow'] * flow_result['confidence']
             )
 
             # Get market regime info if adaptive weights are enabled
@@ -148,7 +155,7 @@ class StockScorer:
 
             # Combined reasoning
             reasoning = self._combine_reasoning(
-                fund_result, mom_result, qual_result, sent_result
+                fund_result, mom_result, qual_result, sent_result, flow_result
             )
 
             result = {
@@ -175,6 +182,11 @@ class StockScorer:
                         'score': sent_result['score'],
                         'confidence': sent_result['confidence'],
                         'reasoning': sent_result['reasoning']
+                    },
+                    'institutional_flow': {
+                        'score': flow_result['score'],
+                        'confidence': flow_result['confidence'],
+                        'reasoning': flow_result['reasoning']
                     }
                 },
                 'metrics': {
@@ -275,7 +287,7 @@ class StockScorer:
         else:
             return "Sell"
 
-    def _combine_reasoning(self, fund: Dict, mom: Dict, qual: Dict, sent: Dict) -> str:
+    def _combine_reasoning(self, fund: Dict, mom: Dict, qual: Dict, sent: Dict, flow: Dict) -> str:
         """Combine reasoning from all agents"""
 
         reasons = []
@@ -297,6 +309,13 @@ class StockScorer:
             reasons.append(f"Quality: {qual['reasoning']}")
         elif qual['score'] < 40:
             reasons.append(f"Quality: {qual['reasoning']}")
+
+        # Institutional Flow (new!)
+        if flow['confidence'] > 0.5:
+            if flow['score'] > 65:
+                reasons.append(f"Institutional Flow: {flow['reasoning']}")
+            elif flow['score'] < 45:
+                reasons.append(f"Institutional Flow: {flow['reasoning']}")
 
         # Sentiment (if meaningful)
         if sent['confidence'] > 0.5:

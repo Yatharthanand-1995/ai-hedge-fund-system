@@ -4,31 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a professional-grade AI-powered hedge fund analysis system that employs **4 specialized agents** to provide comprehensive investment analysis with human-readable narratives. The system combines quantitative analysis with qualitative reasoning to generate professional investment theses.
+This is a professional-grade AI-powered hedge fund analysis system that employs **5 specialized agents** to provide comprehensive investment analysis with human-readable narratives. The system combines quantitative analysis with qualitative reasoning to generate professional investment theses.
 
-### 4-Agent Architecture
+### 5-Agent Architecture
 
-The system's core intelligence is distributed across 4 specialized agents with weighted scoring:
+The system's core intelligence is distributed across 5 specialized agents with weighted scoring:
 
-1. **Fundamentals Agent (40% weight)** - `agents/fundamentals_agent.py`
+1. **Fundamentals Agent (36% weight)** - `agents/fundamentals_agent.py`
    - Analyzes financial health, profitability, growth, and valuation
    - Evaluates ROE, P/E ratios, revenue growth, debt-to-equity
    - Uses yfinance to fetch financial statements and balance sheets
 
-2. **Momentum Agent (30% weight)** - `agents/momentum_agent.py`
+2. **Momentum Agent (27% weight)** - `agents/momentum_agent.py`
    - Technical analysis and price trend evaluation
    - RSI, moving averages, price momentum calculations
    - Uses TA-Lib for technical indicators
 
-3. **Quality Agent (20% weight)** - `agents/quality_agent.py`
+3. **Quality Agent (18% weight)** - `agents/quality_agent.py`
    - Business quality and operational efficiency assessment
    - Analyzes business model characteristics and operational metrics
 
-4. **Sentiment Agent (10% weight)** - `agents/sentiment_agent.py`
+4. **Sentiment Agent (9% weight)** - `agents/sentiment_agent.py`
    - Market sentiment and analyst outlook analysis
    - Optional LLM integration for enhanced sentiment analysis
 
-**Critical Design Principle**: The system supports both **static weights** (40/30/20/10) and **adaptive weights** that adjust based on market regime. By default, static weights are used. Adaptive weights can be enabled via `ENABLE_ADAPTIVE_WEIGHTS=true` environment variable.
+5. **Institutional Flow Agent (10% weight)** - `agents/institutional_flow_agent.py` ✨ **NEW**
+   - Detects institutional buying/selling patterns ("smart money")
+   - Analyzes volume flow trends (OBV, Accumulation/Distribution)
+   - Monitors money flow indicators (MFI, Chaikin Money Flow)
+   - Identifies unusual volume spikes and VWAP positioning
+   - Helps identify stocks with strong institutional support or distribution
+
+**Critical Design Principle**: The system supports both **static weights** (36/27/18/9/10) and **adaptive weights** that adjust based on market regime. By default, static weights are used. Adaptive weights can be enabled via `ENABLE_ADAPTIVE_WEIGHTS=true` environment variable.
 
 ## Key Commands
 
@@ -49,8 +56,11 @@ cd frontend && npm run dev
 ### Testing
 
 ```bash
-# Test all 4 agents and narrative generation
+# Test all 5 agents and narrative generation
 python test_system.py
+
+# Test institutional flow agent specifically
+python test_institutional_flow_simple.py
 
 # Test adaptive regime detection & weights
 python quick_test_regime.py
@@ -91,10 +101,11 @@ cd frontend && npm run lint
    - `EnhancedYahooProvider` fetches comprehensive market data
    - Implements 20-minute caching (`cache_duration = 1200`) for 50-stock universe
    - Calculates technical indicators using TA-Lib
+   - **Institutional flow indicators**: OBV, Accumulation/Distribution, MFI, CMF, VWAP, Volume Z-score
    - Handles numpy array serialization issues with `sanitize_float()` and `sanitize_dict()`
 
 2. **Agent Orchestration** (`core/stock_scorer.py`)
-   - `StockScorer` coordinates all 4 agents
+   - `StockScorer` coordinates all 5 agents
    - Combines weighted scores into composite score
    - Returns confidence-weighted recommendations
 
@@ -138,7 +149,7 @@ The system exposes a FastAPI server on port 8010:
   - Cached for 6 hours, auto-refreshes
 
 ### System
-- **GET /health** - System health check (tests all 4 agents)
+- **GET /health** - System health check (tests all 5 agents)
 - **GET /docs** - Swagger UI documentation
 - **GET /redoc** - ReDoc alternative documentation
 
@@ -227,10 +238,10 @@ The system now supports **ML-based adaptive agent weights** that automatically a
    - **Volatility Analysis**: HIGH_VOL, NORMAL_VOL, or LOW_VOL
 
 2. **Adaptive Weight Adjustment**: Agent weights dynamically change based on regime
-   - **Bull + Normal Vol**: F:40% M:30% Q:20% S:10% (balanced)
-   - **Bull + High Vol**: F:30% M:40% Q:20% S:10% (momentum-focused)
-   - **Bear + High Vol**: F:20% M:20% Q:40% S:20% (quality & safety-focused)
-   - **Bear + Normal Vol**: F:30% M:20% Q:30% S:20% (fundamentals & quality)
+   - **Bull + Normal Vol**: F:36% M:27% Q:18% S:9% IF:10% (balanced)
+   - **Bull + High Vol**: F:27% M:36% Q:18% S:9% IF:10% (momentum-focused)
+   - **Bear + High Vol**: F:18% M:18% Q:36% S:18% IF:10% (quality & safety-focused)
+   - **Bear + Normal Vol**: F:27% M:18% Q:27% S:18% IF:10% (fundamentals & quality)
 
 3. **Caching**: Regime is detected once and cached for 6 hours, then auto-refreshes
 
@@ -301,7 +312,7 @@ The system includes a sophisticated historical backtesting engine in `core/backt
 
 **Version 2.0 Improvements:**
 - ✅ **EnhancedYahooProvider Integration**: Uses same data provider as live system (40+ technical indicators vs 3 in v1.x)
-- ✅ **Live System Weight Alignment**: Always uses production weights (40/30/20/10) - removed `backtest_mode` override
+- ✅ **Live System Weight Alignment**: Always uses production weights (36/27/18/9/10) - removed `backtest_mode` override
 - ✅ **Transparent Bias Documentation**: Clear warnings about look-ahead bias in fundamentals/sentiment data
 - ✅ **Backward Compatibility**: Can run in v1.x mode via `use_enhanced_provider=False`
 - ✅ **Comprehensive Testing**: 21 unit tests covering versioning, data accuracy, and weight consistency
@@ -437,7 +448,7 @@ lsof -ti :5174 | xargs kill -9
 
 ### Agent Failures
 
-Check `/health` endpoint to diagnose which agent is failing. Healthy system requires at least 3/4 agents operational.
+Check `/health` endpoint to diagnose which agent is failing. Healthy system requires at least 4/5 agents operational.
 
 ### Cache Issues
 

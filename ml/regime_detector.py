@@ -297,23 +297,23 @@ class RegimeDetector:
             Optimal weights for current regime
         """
         try:
-            # Default regime-based weights
+            # Default regime-based weights (5-agent system with institutional_flow)
             if regime_weight_map is None:
                 regime_weight_map = {
-                    'BULL_HIGH_VOL': {'fundamentals': 0.3, 'momentum': 0.4, 'quality': 0.2, 'sentiment': 0.1},
-                    'BULL_NORMAL_VOL': {'fundamentals': 0.4, 'momentum': 0.3, 'quality': 0.2, 'sentiment': 0.1},
-                    'BULL_LOW_VOL': {'fundamentals': 0.5, 'momentum': 0.2, 'quality': 0.2, 'sentiment': 0.1},
+                    'BULL_HIGH_VOL': {'fundamentals': 0.27, 'momentum': 0.36, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
+                    'BULL_NORMAL_VOL': {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
+                    'BULL_LOW_VOL': {'fundamentals': 0.45, 'momentum': 0.18, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
 
-                    'BEAR_HIGH_VOL': {'fundamentals': 0.2, 'momentum': 0.2, 'quality': 0.4, 'sentiment': 0.2},
-                    'BEAR_NORMAL_VOL': {'fundamentals': 0.3, 'momentum': 0.2, 'quality': 0.3, 'sentiment': 0.2},
-                    'BEAR_LOW_VOL': {'fundamentals': 0.4, 'momentum': 0.2, 'quality': 0.3, 'sentiment': 0.1},
+                    'BEAR_HIGH_VOL': {'fundamentals': 0.18, 'momentum': 0.18, 'quality': 0.36, 'sentiment': 0.18, 'institutional_flow': 0.10},
+                    'BEAR_NORMAL_VOL': {'fundamentals': 0.27, 'momentum': 0.18, 'quality': 0.27, 'sentiment': 0.18, 'institutional_flow': 0.10},
+                    'BEAR_LOW_VOL': {'fundamentals': 0.36, 'momentum': 0.18, 'quality': 0.27, 'sentiment': 0.09, 'institutional_flow': 0.10},
 
-                    'SIDEWAYS_HIGH_VOL': {'fundamentals': 0.2, 'momentum': 0.3, 'quality': 0.3, 'sentiment': 0.2},
-                    'SIDEWAYS_NORMAL_VOL': {'fundamentals': 0.4, 'momentum': 0.3, 'quality': 0.2, 'sentiment': 0.1},
-                    'SIDEWAYS_LOW_VOL': {'fundamentals': 0.5, 'momentum': 0.2, 'quality': 0.2, 'sentiment': 0.1},
+                    'SIDEWAYS_HIGH_VOL': {'fundamentals': 0.18, 'momentum': 0.27, 'quality': 0.27, 'sentiment': 0.18, 'institutional_flow': 0.10},
+                    'SIDEWAYS_NORMAL_VOL': {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
+                    'SIDEWAYS_LOW_VOL': {'fundamentals': 0.45, 'momentum': 0.18, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
 
-                    # Default fallback
-                    'DEFAULT': {'fundamentals': 0.4, 'momentum': 0.3, 'quality': 0.2, 'sentiment': 0.1}
+                    # Default fallback (same as SIDEWAYS_NORMAL_VOL)
+                    'DEFAULT': {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10}
                 }
 
             # Get weights for current regime or use default
@@ -328,7 +328,7 @@ class RegimeDetector:
 
         except Exception as e:
             logger.error(f"Regime weight lookup failed: {e}")
-            return {'fundamentals': 0.4, 'momentum': 0.3, 'quality': 0.2, 'sentiment': 0.1}
+            return {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10}
 
     def analyze_regime_performance(self, regimes: pd.Series,
                                   returns: pd.Series,
