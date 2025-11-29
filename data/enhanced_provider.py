@@ -93,6 +93,7 @@ class EnhancedYahooProvider:
                 'market_cap': info.get('marketCap', 0),
                 'timestamp': datetime.now().isoformat(),
                 'historical_data': hist,  # Include historical OHLCV data for signal engine
+                'technical_data': technical_data,  # Also include as separate key for institutional flow agent
                 'info': info,  # Full company info for Quality Agent
                 'financials': financials,  # Financial statements for Quality Agent
                 'quarterly_financials': quarterly_financials  # Quarterly financials for Quality Agent

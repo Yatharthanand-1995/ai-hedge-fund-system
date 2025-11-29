@@ -11,6 +11,7 @@ import os
 
 from agents import FundamentalsAgent, MomentumAgent, QualityAgent, SentimentAgent
 from agents.institutional_flow_agent import InstitutionalFlowAgent
+from data.enhanced_provider import EnhancedYahooProvider
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class StockScorer:
         self.quality_agent = QualityAgent(sector_mapping=sector_mapping)
         self.sentiment_agent = SentimentAgent()
         self.institutional_flow_agent = InstitutionalFlowAgent()
+        self.data_provider = EnhancedYahooProvider()  # For comprehensive data including institutional indicators
 
         # Default static weights (5-agent system)
         self.default_weights = {
@@ -109,9 +111,15 @@ class StockScorer:
             current_weights = self._get_current_weights()
             market_regime_info = None
 
+            # If no cached_data, fetch comprehensive data for institutional flow agent
+            if cached_data is None:
+                cached_data = self.data_provider.get_comprehensive_data(symbol)
+
             # Download price data if not provided
             if price_data is None:
-                price_data = yf.download(symbol, period='2y', progress=False)
+                price_data = cached_data.get('historical_data')
+                if price_data is None or price_data.empty:
+                    price_data = yf.download(symbol, period='2y', progress=False)
 
             # Download SPY if not provided
             if spy_data is None:
