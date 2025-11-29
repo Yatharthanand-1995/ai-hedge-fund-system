@@ -126,7 +126,7 @@ class MarketRegimeService:
             force_refresh: Force refresh even if cache is valid
 
         Returns:
-            Dict with agent weights (fundamentals, momentum, quality, sentiment)
+            Dict with agent weights (fundamentals, momentum, quality, sentiment, institutional_flow)
         """
         regime_info = self.get_current_regime(force_refresh=force_refresh)
         return regime_info['weights']
@@ -146,10 +146,11 @@ class MarketRegimeService:
         Returns default regime as SIDEWAYS_NORMAL_VOL with standard weights
         """
         default_weights = {
-            'fundamentals': 0.4,
-            'momentum': 0.3,
-            'quality': 0.2,
-            'sentiment': 0.1
+            'fundamentals': 0.36,
+            'momentum': 0.27,
+            'quality': 0.18,
+            'sentiment': 0.09,
+            'institutional_flow': 0.10
         }
 
         return {

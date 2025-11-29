@@ -93,6 +93,7 @@ class EnhancedYahooProvider:
                 'market_cap': info.get('marketCap', 0),
                 'timestamp': datetime.now().isoformat(),
                 'historical_data': hist,  # Include historical OHLCV data for signal engine
+                'technical_data': technical_data,  # Also include as separate key for institutional flow agent
                 'info': info,  # Full company info for Quality Agent
                 'financials': financials,  # Financial statements for Quality Agent
                 'quarterly_financials': quarterly_financials  # Quarterly financials for Quality Agent
@@ -193,6 +194,15 @@ class EnhancedYahooProvider:
             ad = talib.AD(high, low, close, volume)
             mfi = talib.MFI(high, low, close, volume, timeperiod=14)
 
+            # Chaikin Money Flow (CMF) - Institutional flow indicator
+            cmf = talib.ADOSC(high, low, close, volume, fastperiod=3, slowperiod=10)
+
+            # VWAP (Volume Weighted Average Price) - Custom calculation
+            vwap = self._calculate_vwap(high, low, close, volume)
+
+            # Volume Z-score - Detects unusual institutional activity
+            volume_zscore = self._calculate_volume_zscore(volume)
+
             # Additional Momentum Indicators
             roc = talib.ROC(close, timeperiod=10)  # Rate of Change
             mom = talib.MOM(close, timeperiod=10)  # Momentum
@@ -260,9 +270,12 @@ class EnhancedYahooProvider:
                 'atr': round(atr[-1], 2) if not np.isnan(atr[-1]) else None,
 
                 # Volume
-                'obv': int(obv[-1]) if not np.isnan(obv[-1]) else None,
-                'ad': int(ad[-1]) if not np.isnan(ad[-1]) else None,
-                'mfi': round(mfi[-1], 2) if not np.isnan(mfi[-1]) else None,
+                'obv': obv,  # Return full array for trend analysis
+                'ad': ad,    # Return full array for trend analysis
+                'mfi': mfi,  # Return full array for trend analysis
+                'cmf': cmf,  # Chaikin Money Flow (institutional indicator)
+                'vwap': vwap,  # Volume Weighted Average Price
+                'volume_zscore': volume_zscore,  # Volume spike detection
 
                 # Additional Momentum
                 'roc': round(roc[-1], 2) if not np.isnan(roc[-1]) else None,
@@ -392,6 +405,81 @@ class EnhancedYahooProvider:
             return "High"
         else:
             return "Very High"
+
+    def _calculate_vwap(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, volume: np.ndarray) -> np.ndarray:
+        """
+        Calculate Volume Weighted Average Price (VWAP)
+
+        VWAP is the average price weighted by volume - used by institutional traders
+        as a benchmark for execution quality.
+
+        Returns:
+            numpy array of VWAP values
+        """
+        try:
+            # Typical price (average of high, low, close)
+            typical_price = (high + low + close) / 3.0
+
+            # Calculate cumulative volume-weighted price
+            # Use rolling window to avoid cumulative sum getting too large
+            window = min(60, len(volume))  # 60-day rolling VWAP
+
+            vwap = np.zeros_like(close)
+            for i in range(len(close)):
+                start_idx = max(0, i - window + 1)
+                volume_slice = volume[start_idx:i+1]
+                price_slice = typical_price[start_idx:i+1]
+
+                total_volume = np.sum(volume_slice)
+                if total_volume > 0:
+                    vwap[i] = np.sum(price_slice * volume_slice) / total_volume
+                else:
+                    vwap[i] = close[i]
+
+            return vwap
+
+        except Exception as e:
+            logger.warning(f"VWAP calculation failed: {e}")
+            # Return close prices as fallback
+            return close.copy()
+
+    def _calculate_volume_zscore(self, volume: np.ndarray, window: int = 20) -> np.ndarray:
+        """
+        Calculate Z-score of volume to detect unusual activity
+
+        Z-score > 2 indicates volume spike (potential institutional activity)
+        Z-score > 3 indicates extreme volume spike
+
+        Args:
+            volume: Volume array
+            window: Rolling window for mean/std calculation (default 20 days)
+
+        Returns:
+            numpy array of volume Z-scores
+        """
+        try:
+            zscore = np.zeros_like(volume, dtype=float)
+
+            for i in range(len(volume)):
+                if i < window:
+                    # Not enough data for Z-score
+                    zscore[i] = 0.0
+                else:
+                    # Calculate rolling mean and std
+                    volume_window = volume[i-window:i]
+                    mean_vol = np.mean(volume_window)
+                    std_vol = np.std(volume_window)
+
+                    if std_vol > 0:
+                        zscore[i] = (volume[i] - mean_vol) / std_vol
+                    else:
+                        zscore[i] = 0.0
+
+            return zscore
+
+        except Exception as e:
+            logger.warning(f"Volume Z-score calculation failed: {e}")
+            return np.zeros_like(volume, dtype=float)
 
     def _is_cached_data_fresh(self, symbol: str) -> bool:
         """Check if cached data is still fresh"""
