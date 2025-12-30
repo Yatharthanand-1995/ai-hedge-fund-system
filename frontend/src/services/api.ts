@@ -9,6 +9,10 @@ import {
   type BatchAnalysisRequest,
   type PortfolioRequest,
   type ApiError,
+  type ConsensusResponse,
+  type BacktestResponse,
+  type BacktestHistoryResponse,
+  type BacktestConfig,
 } from '../types/api';
 
 // API Configuration
@@ -72,6 +76,27 @@ export const apiService = {
     const response: AxiosResponse<TopPicksResponse> = await apiClient.get(`/portfolio/top-picks?limit=${limit}`);
     return response.data;
   },
+
+  // Consensus Analysis
+  async getConsensus(symbols: string[]): Promise<ConsensusResponse> {
+    const symbolsParam = symbols.join(',');
+    const response: AxiosResponse<ConsensusResponse> = await apiClient.get(`/analyze/consensus?symbols=${symbolsParam}`);
+    return response.data;
+  },
+
+  // Backtest History
+  async getBacktestHistory(): Promise<BacktestHistoryResponse> {
+    const response: AxiosResponse<BacktestHistoryResponse> = await apiClient.get('/backtest/history');
+    return response.data;
+  },
+
+  // Run Backtest
+  async runBacktest(config: BacktestConfig): Promise<BacktestResponse> {
+    const response: AxiosResponse<BacktestResponse> = await apiClient.post('/backtest/run', config, {
+      timeout: 60000, // 60 seconds for backtests
+    });
+    return response.data;
+  },
 };
 
 // Query Keys for React Query
@@ -82,6 +107,8 @@ export const queryKeys = {
   portfolioAnalysis: (symbols: string[], weights?: number[]) =>
     ['portfolioAnalysis', symbols.sort().join(','), weights?.join(',') || ''] as const,
   topPicks: (limit: number) => ['topPicks', limit] as const,
+  consensus: (symbols: string[]) => ['consensus', symbols.sort().join(',')] as const,
+  backtestHistory: ['backtestHistory'] as const,
 };
 
 // Default query options
@@ -106,5 +133,13 @@ export const queryOptions = {
   topPicks: {
     ...defaultQueryOptions,
     staleTime: 10 * 60 * 1000, // 10 minutes
+  },
+  consensus: {
+    ...defaultQueryOptions,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  },
+  backtestHistory: {
+    ...defaultQueryOptions,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   },
 };

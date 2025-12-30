@@ -183,3 +183,86 @@ export interface SearchState {
   suggestions: string[];
   isSearching: boolean;
 }
+
+// Consensus Analysis Types
+export interface AgentConsensusData {
+  name: string;
+  score: number;
+  confidence: number;
+  weight: number;
+  accuracy: number;
+  reasoning: string;
+  status: 'healthy' | 'degraded' | 'unhealthy';
+}
+
+export interface ConsensusAnalysis {
+  symbol: string;
+  overallScore: number;
+  consensus: 'strong' | 'moderate' | 'weak';
+  agreement: number;
+  conflictAreas: string[];
+  topReason: string;
+  agents: AgentConsensusData[];
+}
+
+export interface ConsensusResponse {
+  consensus: ConsensusAnalysis[];
+  timestamp: string;
+}
+
+// Backtest Types
+export interface BacktestMetrics {
+  sharpe_ratio: number;
+  max_drawdown: number;
+  volatility: number;
+}
+
+export interface EquityCurvePoint {
+  date: string;
+  value: number;
+  return: number;
+}
+
+export interface RebalanceEvent {
+  date: string;
+  portfolio: string[];
+  portfolio_value: number;
+  avg_score: number;
+}
+
+export interface BacktestResult {
+  start_date: string;
+  end_date: string;
+  initial_capital: number;
+  final_value: number;
+  total_return: number;
+  benchmark_return: number;
+  spy_return: number;
+  outperformance_vs_benchmark: number;
+  outperformance_vs_spy: number;
+  rebalances: number;
+  metrics: BacktestMetrics;
+  equity_curve: EquityCurvePoint[];
+  rebalance_log: RebalanceEvent[];
+}
+
+export interface BacktestConfig {
+  start_date: string;
+  end_date: string;
+  rebalance_frequency: 'monthly' | 'quarterly';
+  top_n: number;
+  universe: string[];
+  initial_capital: number;
+}
+
+export interface BacktestResponse {
+  results: BacktestResult;
+  config: BacktestConfig;
+  timestamp: string;
+}
+
+export interface BacktestHistoryResponse {
+  results: BacktestResult[];
+  total_count: number;
+  timestamp: string;
+}

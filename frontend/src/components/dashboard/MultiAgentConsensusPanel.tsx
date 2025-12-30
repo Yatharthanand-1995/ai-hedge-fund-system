@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 import { Brain, AlertCircle, CheckCircle, Users, Target, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn, formatPercentage } from '../../utils';
 import { SkeletonLoader } from '../common/SkeletonLoader';
+import { useConsensus } from '../../hooks/useApi';
 
 interface AgentData {
   name: string;
@@ -29,44 +30,19 @@ interface MultiAgentConsensusPanelProps {
 }
 
 export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> = ({ className }) => {
-  const [consensusData, setConsensusData] = useState<ConsensusData[]>([]);
+  const symbols = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
+  const { data, isLoading, error, refetch } = useConsensus(symbols);
+
   const [selectedStock, setSelectedStock] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchConsensusData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch consensus data for top stocks
-      const response = await fetch('http://localhost:8010/analyze/consensus?symbols=AAPL,MSFT,GOOGL,NVDA,TSLA');
-
-      if (!response.ok) {
-        throw new Error('Unable to fetch consensus data. Please check your connection.');
-      }
-
-      const data = await response.json();
-      const consensusArray: ConsensusData[] = data.consensus || [];
-
-      setConsensusData(consensusArray);
-      if (consensusArray.length > 0) {
-        setSelectedStock(consensusArray[0].symbol);
-      }
-      setError(null);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load consensus data. Please try again.';
-      setError(errorMessage);
-      console.error('Failed to fetch consensus data:', err);
-    } finally {
-      setLoading(false);
+  // Set initial selected stock when data loads
+  React.useEffect(() => {
+    if (data?.consensus && data.consensus.length > 0 && !selectedStock) {
+      setSelectedStock(data.consensus[0].symbol);
     }
-  };
+  }, [data, selectedStock]);
 
-  useEffect(() => {
-    fetchConsensusData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const consensusData: ConsensusData[] = data?.consensus || [];
 
   const getConsensusColor = (consensus: string) => {
     switch (consensus) {
@@ -124,7 +100,7 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
     console.log('Exported consensus report for', selectedStock);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={cn('professional-card p-6', className)}>
         <div className="flex items-center justify-between mb-6">
@@ -157,9 +133,9 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
           <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-red-500 mb-2">Failed to Load AI Consensus</h3>
-            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <p className="text-sm text-muted-foreground mb-4">{error.detail || 'Failed to load consensus data. Please try again.'}</p>
             <button
-              onClick={fetchConsensusData}
+              onClick={() => refetch()}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/80 text-accent-foreground rounded-lg font-medium text-sm transition-colors"
             >
               <RefreshCw className="h-4 w-4" />

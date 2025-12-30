@@ -14,6 +14,10 @@ import {
   type BatchAnalysisRequest,
   type PortfolioRequest,
   type ApiError,
+  type ConsensusResponse,
+  type BacktestHistoryResponse,
+  type BacktestResponse,
+  type BacktestConfig,
 } from '../types/api';
 
 // Health Check Hook
@@ -130,6 +134,48 @@ export const usePrefetchStockAnalysis = () => {
   };
 };
 
+// Consensus Analysis Hook
+export const useConsensus = (
+  symbols: string[],
+  options?: Partial<UseQueryOptions<ConsensusResponse, ApiError>>
+) => {
+  return useQuery({
+    queryKey: queryKeys.consensus(symbols),
+    queryFn: () => apiService.getConsensus(symbols),
+    enabled: symbols.length > 0,
+    ...queryOptions.consensus,
+    ...options,
+  });
+};
+
+// Backtest History Hook
+export const useBacktestHistory = (
+  options?: Partial<UseQueryOptions<BacktestHistoryResponse, ApiError>>
+) => {
+  return useQuery({
+    queryKey: queryKeys.backtestHistory,
+    queryFn: apiService.getBacktestHistory,
+    ...queryOptions.backtestHistory,
+    ...options,
+  });
+};
+
+// Run Backtest Mutation Hook
+export const useRunBacktest = (
+  options?: UseMutationOptions<BacktestResponse, ApiError, BacktestConfig>
+) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: apiService.runBacktest,
+    onSuccess: () => {
+      // Invalidate backtest history to refetch updated list
+      queryClient.invalidateQueries({ queryKey: queryKeys.backtestHistory });
+    },
+    ...options,
+  });
+};
+
 // Cache Management Hooks
 export const useInvalidateQueries = () => {
   const queryClient = useQueryClient();
@@ -141,6 +187,8 @@ export const useInvalidateQueries = () => {
         ? queryClient.invalidateQueries({ queryKey: queryKeys.stockAnalysis(symbol) })
         : queryClient.invalidateQueries({ queryKey: ['stockAnalysis'] }),
     invalidateTopPicks: () => queryClient.invalidateQueries({ queryKey: ['topPicks'] }),
+    invalidateConsensus: () => queryClient.invalidateQueries({ queryKey: ['consensus'] }),
+    invalidateBacktestHistory: () => queryClient.invalidateQueries({ queryKey: queryKeys.backtestHistory }),
     invalidateAll: () => queryClient.invalidateQueries(),
     clearCache: () => queryClient.clear(),
   };

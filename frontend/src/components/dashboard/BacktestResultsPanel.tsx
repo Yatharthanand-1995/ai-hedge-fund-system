@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, Calendar, DollarSign, Target, Activity, Play, Pause, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, Calendar, DollarSign, Target, Activity, Play, Pause, Download, AlertTriangle, RefreshCw } from 'lucide-react';
 import { cn, formatCurrency, formatPercentage } from '../../utils';
+import { useBacktestHistory, useRunBacktest } from '../../hooks/useApi';
+import { SkeletonLoader } from '../common/SkeletonLoader';
 
 interface BacktestResult {
   start_date: string;
@@ -46,9 +48,20 @@ interface BacktestResultsPanelProps {
 }
 
 export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ className }) => {
-  const [backtestResults, setBacktestResults] = useState<BacktestResult[]>([]);
+  const { data: historyData, isLoading, error, refetch } = useBacktestHistory();
+  const { mutate: runBacktest, isPending: isRunning } = useRunBacktest({
+    onSuccess: () => {
+      // History will be automatically refetched due to invalidation in the hook
+      console.log('✅ Backtest completed successfully');
+    },
+    onError: (error) => {
+      console.error('❌ Backtest failed:', error);
+      alert(`Backtest failed: ${error.detail || 'Unknown error'}\n\nPlease ensure the API server is running on localhost:8010`);
+    },
+  });
+
+  const backtestResults: BacktestResult[] = historyData?.results || [];
   const [selectedResult, setSelectedResult] = useState<BacktestResult | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
   const [config, setConfig] = useState<BacktestConfig>({
     start_date: '2023-01-01',
     end_date: '2024-01-01',
@@ -58,35 +71,12 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     initial_capital: 10000
   });
 
-  useEffect(() => {
-    // Load backtest history from API
-    loadBacktestHistory();
-  }, []);
-
-  const loadBacktestHistory = async () => {
-    try {
-      // Fetch backtest history from API
-      const response = await fetch('http://localhost:8010/backtest/history');
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.length > 0) {
-          setBacktestResults(data);
-          setSelectedResult(data[0]);
-        } else {
-          setBacktestResults([]);
-          setSelectedResult(null);
-        }
-      } else {
-        setBacktestResults([]);
-        setSelectedResult(null);
-      }
-    } catch (error) {
-      console.error('Failed to load backtest history:', error);
-      setBacktestResults([]);
-      setSelectedResult(null);
+  // Set initial selected result when data loads
+  React.useEffect(() => {
+    if (backtestResults.length > 0 && !selectedResult) {
+      setSelectedResult(backtestResults[0]);
     }
-  };
+  }, [backtestResults, selectedResult]);
 
   // Reserved for future mock data generation functionality
   // @ts-ignore - Reserved for future use
@@ -193,53 +183,9 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     });
   };
 
-  const runBacktest = async () => {
-    try {
-      setIsRunning(true);
-
-      console.log('🚀 Running backtest with config:', config);
-
-      // Call the real backtest API with 60s timeout (backtests can take time)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-      const response = await fetch('http://localhost:8010/backtest/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const apiResult = await response.json();
-        console.log('✅ Backtest completed successfully:', apiResult);
-
-        if (apiResult && apiResult.results) {
-          // Backtest was saved to storage backend, now reload history to get updated list
-          await loadBacktestHistory();
-          console.log('✅ Backtest history reloaded from storage');
-          return;
-        }
-      } else {
-        const errorText = await response.text();
-        console.error('❌ Backtest API failed:', response.status, errorText);
-        throw new Error(`Backtest failed: ${response.status}`);
-      }
-
-      throw new Error('No results returned from backtest API');
-
-    } catch (error) {
-      console.error('❌ Backtest failed with error:', error);
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        alert('Backtest timed out after 60 seconds.\n\nThis usually happens for long time periods (multi-year backtests).\n\nTry:\n• Shorter date range (1-6 months)\n• Smaller stock universe\n• Monthly instead of quarterly rebalancing');
-      } else {
-        alert(`Backtest failed: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease ensure the API server is running on localhost:8010`);
-      }
-    } finally {
-      setIsRunning(false);
-    }
+  const handleRunBacktest = () => {
+    console.log('🚀 Running backtest with config:', config);
+    runBacktest(config);
   };
 
   // Reserved for future config-based backtest generation functionality
@@ -406,6 +352,47 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
     alert('View Full Report\n\nIn a real app, this would:\n• Open detailed PDF/HTML report\n• Show all metrics and analysis\n• Include trade-by-trade breakdown\n• Provide risk analysis charts');
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className={cn('professional-card p-6', className)}>
+        <div className="flex items-center justify-between mb-6">
+          <SkeletonLoader variant="text" lines={1} height="32px" className="w-64" />
+          <SkeletonLoader variant="button" height="40px" />
+        </div>
+        <div className="mb-6">
+          <SkeletonLoader variant="card" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+          <SkeletonLoader variant="card" />
+          <SkeletonLoader variant="card" />
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className={cn('professional-card p-6 border-2 border-red-500/20 bg-red-500/5', className)}>
+        <div className="flex items-start space-x-4">
+          <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-red-500 mb-2">Failed to Load Backtest History</h3>
+            <p className="text-sm text-muted-foreground mb-4">{error.detail || 'Failed to load backtest history. Please try again.'}</p>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/80 text-accent-foreground rounded-lg font-medium text-sm transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>Retry</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn('professional-card p-6', className)}>
       {/* Header */}
@@ -416,13 +403,13 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
         </h2>
         <div className="flex space-x-2">
           <button
-            onClick={runBacktest}
+            onClick={handleRunBacktest}
             disabled={isRunning}
-            className="bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2"
+            className="bg-accent hover:bg-accent/80 text-accent-foreground px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRunning ? (
               <>
-                <Pause className="h-4 w-4" />
+                <Pause className="h-4 w-4 animate-pulse" />
                 <span>Running...</span>
               </>
             ) : (
@@ -491,12 +478,21 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
             Run your first backtest to see results here. All backtest runs will be saved and tracked.
           </p>
           <button
-            onClick={runBacktest}
+            onClick={handleRunBacktest}
             disabled={isRunning}
-            className="bg-accent hover:bg-accent/80 text-accent-foreground px-6 py-3 rounded-lg font-medium transition-colors inline-flex items-center space-x-2"
+            className="bg-accent hover:bg-accent/80 text-accent-foreground px-6 py-3 rounded-lg font-medium transition-colors inline-flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Play className="h-5 w-5" />
-            <span>Run Your First Backtest</span>
+            {isRunning ? (
+              <>
+                <Pause className="h-5 w-5 animate-pulse" />
+                <span>Running Backtest...</span>
+              </>
+            ) : (
+              <>
+                <Play className="h-5 w-5" />
+                <span>Run Your First Backtest</span>
+              </>
+            )}
           </button>
         </div>
       )}
