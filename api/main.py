@@ -115,6 +115,7 @@ from core.stock_scorer import StockScorer
 from core.parallel_executor import ParallelAgentExecutor
 from data.enhanced_provider import EnhancedYahooProvider
 from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
+from config.agent_weights import get_weight_percentages
 
 # Configure logging with rotation
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -175,7 +176,7 @@ app = FastAPI(
 ## Investment Narrative Engine
 
 * **Comprehensive Investment Thesis** - Human-readable analysis combining all 5 agents
-* **Weighted Scoring System** - Fundamentals (40%), Momentum (30%), Quality (20%), Sentiment (10%)
+* **Weighted Scoring System** - Fundamentals (36%), Momentum (27%), Quality (18%), Sentiment (9%), Institutional Flow (10%)
 * **Clear Recommendations** - STRONG BUY/BUY/WEAK BUY/HOLD/WEAK SELL/SELL ratings
 * **Risk Assessment** - Detailed risk analysis and position sizing recommendations
 
@@ -871,10 +872,12 @@ async def get_agent_consensus(symbols: str = "AAPL,MSFT,GOOGL"):
             agents_data = []
             agent_scores_list = []
 
+            # Get weight percentages from centralized configuration
+            weight_map = get_weight_percentages()
+
             for agent_name in ['fundamentals', 'momentum', 'quality', 'sentiment', 'institutional_flow']:
                 if agent_name in agent_results:
                     agent_info = agent_results[agent_name]
-                    weight_map = {'fundamentals': 36, 'momentum': 27, 'quality': 18, 'sentiment': 9, 'institutional_flow': 10}
 
                     score = agent_info.get('score', 50)
                     confidence = agent_info.get('confidence', 0.5)

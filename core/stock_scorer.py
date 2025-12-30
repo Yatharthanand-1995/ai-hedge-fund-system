@@ -12,6 +12,7 @@ import os
 from agents import FundamentalsAgent, MomentumAgent, QualityAgent, SentimentAgent
 from agents.institutional_flow_agent import InstitutionalFlowAgent
 from data.enhanced_provider import EnhancedYahooProvider
+from config.agent_weights import get_agent_weights, STATIC_AGENT_WEIGHTS
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +44,8 @@ class StockScorer:
         self.institutional_flow_agent = InstitutionalFlowAgent()
         self.data_provider = EnhancedYahooProvider()  # For comprehensive data including institutional indicators
 
-        # Default static weights (5-agent system)
-        self.default_weights = {
-            'fundamentals': 0.36,
-            'momentum': 0.27,
-            'quality': 0.18,
-            'sentiment': 0.09,
-            'institutional_flow': 0.10
-        }
+        # Get default static weights from centralized configuration
+        self.default_weights = STATIC_AGENT_WEIGHTS.copy()
 
         # Determine if adaptive weights should be used
         if use_adaptive_weights is None:

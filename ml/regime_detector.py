@@ -8,6 +8,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 import logging
 from datetime import datetime, timedelta
+from config.agent_weights import STATIC_AGENT_WEIGHTS
 
 logger = logging.getLogger(__name__)
 
@@ -312,8 +313,8 @@ class RegimeDetector:
                     'SIDEWAYS_NORMAL_VOL': {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
                     'SIDEWAYS_LOW_VOL': {'fundamentals': 0.45, 'momentum': 0.18, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10},
 
-                    # Default fallback (same as SIDEWAYS_NORMAL_VOL)
-                    'DEFAULT': {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10}
+                    # Default fallback - use centralized static weights
+                    'DEFAULT': STATIC_AGENT_WEIGHTS.copy()
                 }
 
             # Get weights for current regime or use default
@@ -328,7 +329,8 @@ class RegimeDetector:
 
         except Exception as e:
             logger.error(f"Regime weight lookup failed: {e}")
-            return {'fundamentals': 0.36, 'momentum': 0.27, 'quality': 0.18, 'sentiment': 0.09, 'institutional_flow': 0.10}
+            # Return centralized static weights as fallback
+            return STATIC_AGENT_WEIGHTS.copy()
 
     def analyze_regime_performance(self, regimes: pd.Series,
                                   returns: pd.Series,

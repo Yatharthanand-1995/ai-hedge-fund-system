@@ -10,6 +10,7 @@ from typing import Dict, Optional
 import logging
 from datetime import datetime, timedelta
 from ml.regime_detector import RegimeDetector
+from config.agent_weights import STATIC_AGENT_WEIGHTS
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +146,8 @@ class MarketRegimeService:
 
         Returns default regime as SIDEWAYS_NORMAL_VOL with standard weights
         """
-        default_weights = {
-            'fundamentals': 0.36,
-            'momentum': 0.27,
-            'quality': 0.18,
-            'sentiment': 0.09,
-            'institutional_flow': 0.10
-        }
+        # Use centralized static weights as default
+        default_weights = STATIC_AGENT_WEIGHTS.copy()
 
         return {
             'regime': 'SIDEWAYS_NORMAL_VOL',

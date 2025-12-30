@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 import os
 import json
+from config.agent_weights import STATIC_AGENT_WEIGHTS
 
 # LLM imports
 try:
@@ -97,23 +98,11 @@ class InvestmentNarrativeEngine:
                 return self.market_regime_service.get_adaptive_weights()
             except Exception as e:
                 logger.warning(f"Failed to get adaptive weights, using static: {e}")
-                # Fallback to static weights
-                return {
-                    'fundamentals': 0.36,
-                'momentum': 0.27,
-                'quality': 0.18,
-                'sentiment': 0.09,
-                'institutional_flow': 0.10
-                }
+                # Fallback to static weights from centralized config
+                return STATIC_AGENT_WEIGHTS.copy()
         else:
-            # Static weights (default)
-            return {
-                'fundamentals': 0.36,
-                'momentum': 0.27,
-                'quality': 0.18,
-                'sentiment': 0.09,
-                'institutional_flow': 0.10
-            }
+            # Static weights (default) from centralized config
+            return STATIC_AGENT_WEIGHTS.copy()
 
     def generate_comprehensive_thesis(self, symbol: str, agent_results: Dict,
                                     stock_info: Optional[Dict] = None) -> Dict:
