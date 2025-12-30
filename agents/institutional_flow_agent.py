@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional
 import logging
+from utils.agent_response import create_error_response, create_neutral_response, ErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -396,9 +397,8 @@ class InstitutionalFlowAgent:
 
     def _no_signal(self, symbol: str, reason: str) -> Dict:
         """Return neutral signal when analysis cannot be performed"""
-        return {
-            'score': 50.0,
-            'confidence': 0.2,
-            'metrics': {'insufficient_data': True},
-            'reasoning': f"Limited institutional flow analysis: {reason}"
-        }
+        return create_neutral_response(
+            reasoning=f"Limited institutional flow analysis: {reason}",
+            partial_metrics={'insufficient_data': True},
+            confidence=0.2
+        )

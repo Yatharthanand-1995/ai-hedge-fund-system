@@ -569,7 +569,7 @@ export const BacktestResultsPanel: React.FC<BacktestResultsPanelProps> = ({ clas
                   {selectedResult.start_date} to {selectedResult.end_date}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Real 4-Agent Analysis • {selectedResult.rebalances} Rebalances •
+                  Real 5-Agent Analysis • {selectedResult.rebalances} Rebalances •
                   {(() => {
                     const startDate = new Date(selectedResult.start_date);
                     const endDate = new Date(selectedResult.end_date);

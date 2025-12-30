@@ -131,8 +131,8 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
           <SkeletonLoader variant="text" lines={1} height="24px" className="w-48" />
           <SkeletonLoader variant="button" height="40px" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          {[1, 2, 3, 4].map(i => (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          {[1, 2, 3, 4, 5].map(i => (
             <div key={i} className="text-center">
               <SkeletonLoader variant="text" lines={2} />
             </div>
@@ -204,7 +204,7 @@ export const MultiAgentConsensusPanel: React.FC<MultiAgentConsensusPanelProps> =
       {selectedData && (
         <>
           {/* Consensus Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="text-center">
               <div className="text-sm text-muted-foreground mb-1">Overall Score</div>
               <div className={cn('text-2xl font-bold', getScoreColor(selectedData.overallScore))}>

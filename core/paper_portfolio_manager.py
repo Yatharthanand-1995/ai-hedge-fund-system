@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 from functools import lru_cache
-import time
+from cachetools import TTLCache
 
 
 class PaperPortfolioManager:
@@ -29,9 +29,9 @@ class PaperPortfolioManager:
         # Ensure data directory exists
         self.portfolio_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Price cache: {symbol: {'price': float, 'timestamp': float}}
-        self._price_cache = {}
-        self._cache_ttl = 60  # Cache prices for 60 seconds
+        # Price cache with automatic eviction: max 500 symbols, 60s TTL
+        # Prevents memory leak from unbounded dict growth
+        self._price_cache = TTLCache(maxsize=500, ttl=60)
 
         # Load or initialize portfolio
         self._load_or_initialize_portfolio()
@@ -87,6 +87,53 @@ class PaperPortfolioManager:
         with open(self.transaction_log_file, 'w') as f:
             json.dump(transactions, f, indent=2)
 
+    def _validate_trade_inputs(self, shares: int, price: float, action: str) -> Optional[str]:
+        """
+        Validate trading inputs (shares and price).
+
+        Args:
+            shares: Number of shares
+            price: Price per share
+            action: Trading action (for error messages)
+
+        Returns:
+            Error message if validation fails, None if valid
+        """
+        import math
+
+        # Validate shares
+        if not isinstance(shares, (int, float)):
+            return f'Invalid shares: must be a number, got {type(shares).__name__}'
+
+        if shares <= 0:
+            return 'Shares must be positive'
+
+        if not isinstance(shares, int) and not shares.is_integer():
+            return f'Shares must be a whole number, got {shares}'
+
+        # Validate price
+        if not isinstance(price, (int, float)):
+            return f'Invalid price: must be a number, got {type(price).__name__}'
+
+        if price <= 0:
+            return 'Price must be positive'
+
+        if math.isnan(price):
+            return 'Invalid price: NaN (not a number)'
+
+        if math.isinf(price):
+            return 'Invalid price: infinity'
+
+        # Validate total cost doesn't overflow
+        try:
+            total = shares * price
+            if math.isinf(total):
+                return f'Total cost overflow: {shares} × ${price} is too large'
+        except (OverflowError, ValueError) as e:
+            return f'Calculation error: {str(e)}'
+
+        return None
+
     def buy(self, symbol: str, shares: int, price: float) -> Dict:
         """
         Buy shares of a stock.
@@ -99,8 +146,14 @@ class PaperPortfolioManager:
         Returns:
             Dict with status and message
         """
-        if shares <= 0:
-            return {'success': False, 'message': 'Shares must be positive'}
+        # Validate inputs
+        validation_error = self._validate_trade_inputs(shares, price, 'buy')
+        if validation_error:
+            return {'success': False, 'message': validation_error}
+
+        # Validate symbol
+        if not symbol or not isinstance(symbol, str):
+            return {'success': False, 'message': 'Invalid symbol'}
 
         total_cost = shares * price
 
@@ -158,8 +211,14 @@ class PaperPortfolioManager:
         Returns:
             Dict with status and message
         """
-        if shares <= 0:
-            return {'success': False, 'message': 'Shares must be positive'}
+        # Validate inputs
+        validation_error = self._validate_trade_inputs(shares, price, 'sell')
+        if validation_error:
+            return {'success': False, 'message': validation_error}
+
+        # Validate symbol
+        if not symbol or not isinstance(symbol, str):
+            return {'success': False, 'message': 'Invalid symbol'}
 
         # Check if we own this stock
         if symbol not in self.positions:
@@ -215,13 +274,9 @@ class PaperPortfolioManager:
         Returns:
             Current price or None if unavailable
         """
-        current_time = time.time()
-
-        # Check cache
+        # Check cache (TTLCache handles expiration automatically)
         if symbol in self._price_cache:
-            cached = self._price_cache[symbol]
-            if current_time - cached['timestamp'] < self._cache_ttl:
-                return cached['price']
+            return self._price_cache[symbol]
 
         # Fetch fresh price
         try:
@@ -231,10 +286,8 @@ class PaperPortfolioManager:
 
             if data and 'current_price' in data:
                 price = data['current_price']
-                self._price_cache[symbol] = {
-                    'price': price,
-                    'timestamp': current_time
-                }
+                # TTLCache will auto-expire after 60s and evict if >500 symbols
+                self._price_cache[symbol] = price
                 return price
         except Exception as e:
             print(f"Warning: Could not fetch price for {symbol}: {e}")

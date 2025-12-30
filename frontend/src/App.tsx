@@ -97,6 +97,7 @@ interface TopPickData {
     momentum: number;
     quality: number;
     sentiment: number;
+    institutional_flow: number;
   };
   market_data: {
     current_price: number;
@@ -121,7 +122,7 @@ interface TopPickData {
 }
 
 // Enhanced Professional Dashboard Component
-const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details') => void }> = ({ onPageChange }) => {
+const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts') => void }> = ({ onPageChange }) => {
   const [topPicks, setTopPicks] = useState<TopPickData[]>([]);
   const [isLoadingPicks, setIsLoadingPicks] = useState(true);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -259,7 +260,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
           🏦 AI Hedge Fund System
         </h1>
         <p className="text-xl text-muted-foreground">
-          Professional-grade investment analysis with 4-agent intelligence
+          Professional-grade investment analysis with 5-agent intelligence
         </p>
       </div>
 
@@ -357,7 +358,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
             <div className="text-3xl mb-2">📊</div>
             <h3 className="font-semibold mb-2">Deep Stock Analysis</h3>
             <p className="text-muted-foreground text-sm">
-              Comprehensive 4-agent analysis with detailed narratives
+              Comprehensive 5-agent analysis with detailed narratives
             </p>
             <div className="mt-2 text-accent text-sm font-medium">Analyze →</div>
           </button>
@@ -403,7 +404,7 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 // Main App Component
 function App() {
   console.log('🎯 App component rendering...');
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details'>('dashboard');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts'>('dashboard');
   console.log('📄 Current page:', currentPage);
 
   return (

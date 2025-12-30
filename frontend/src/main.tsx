@@ -84,7 +84,7 @@ createRoot(rootElement).render(
               fontSize: '0.875rem',
               overflow: 'auto'
             }}>
-              {error.toString()}
+              {error instanceof Error ? error.toString() : String(error)}
               {componentStack}
             </pre>
           </details>

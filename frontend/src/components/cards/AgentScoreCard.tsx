@@ -17,6 +17,7 @@ const agentLabels: Record<AgentType, string> = {
   momentum: 'Momentum',
   quality: 'Quality',
   sentiment: 'Sentiment',
+  institutional_flow: 'Institutional Flow',
 };
 
 const agentDescriptions: Record<AgentType, string> = {
@@ -24,6 +25,7 @@ const agentDescriptions: Record<AgentType, string> = {
   momentum: 'Technical analysis and price trend evaluation',
   quality: 'Business characteristics and operational efficiency',
   sentiment: 'Market sentiment and analyst outlook analysis',
+  institutional_flow: 'Smart money detection and institutional buying/selling patterns',
 };
 
 export const AgentScoreCard: React.FC<AgentScoreCardProps> = ({

@@ -1,5 +1,5 @@
 """
-FastAPI Web Application for 4-Agent AI Hedge Fund System
+FastAPI Web Application for 5-Agent AI Hedge Fund System
 Production-ready API with narrative generation and investment analysis
 """
 
@@ -8,10 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, validator, Field
 from typing import List, Dict, Optional
+from starlette.middleware.base import BaseHTTPMiddleware
 import asyncio
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+import uuid
 
 # Optional rate limiting - gracefully degrades if slowapi not installed
 try:
@@ -32,6 +34,7 @@ import pandas as pd
 import time
 from functools import lru_cache
 import concurrent.futures
+from cachetools import TTLCache
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -101,7 +104,7 @@ class NumpyEncoder(json.JSONEncoder):
                 return str(obj)
         return super().default(obj)
 
-# Import our 4-agent hedge fund components
+# Import our 5-agent hedge fund components
 from agents.fundamentals_agent import FundamentalsAgent
 from agents.momentum_agent import MomentumAgent
 from agents.quality_agent import QualityAgent
@@ -140,9 +143,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# In-memory cache for analyses with TTL
-analysis_cache = {}
-CACHE_TTL_SECONDS = 1200  # 20 minutes (extended for 50-stock universe)
+# Thread-safe in-memory cache for analyses with TTL
+# Configurable via environment variables
+CACHE_MAX_SIZE = int(os.getenv('CACHE_MAX_SIZE', '2000'))  # Increased from 1000 to 2000
+CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '1200'))  # 20 minutes default
+analysis_cache = TTLCache(maxsize=CACHE_MAX_SIZE, ttl=CACHE_TTL_SECONDS)
+cache_lock = asyncio.Lock()  # Lock for thread-safe cache access
 
 # Thread pool for concurrent processing
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
@@ -155,11 +161,11 @@ else:
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="4-Agent AI Hedge Fund System",
+    title="5-Agent AI Hedge Fund System",
     description="""
 🏦 **AI-Powered Hedge Fund Analysis Platform** with multi-agent investment analysis and narrative generation.
 
-## 4-Agent Analysis Framework
+## 5-Agent Analysis Framework
 
 * **Fundamentals Agent** - Financial health, profitability, growth, and valuation analysis
 * **Momentum Agent** - Technical analysis and price trend evaluation
@@ -168,7 +174,7 @@ app = FastAPI(
 
 ## Investment Narrative Engine
 
-* **Comprehensive Investment Thesis** - Human-readable analysis combining all 4 agents
+* **Comprehensive Investment Thesis** - Human-readable analysis combining all 5 agents
 * **Weighted Scoring System** - Fundamentals (40%), Momentum (30%), Quality (20%), Sentiment (10%)
 * **Clear Recommendations** - STRONG BUY/BUY/WEAK BUY/HOLD/WEAK SELL/SELL ratings
 * **Risk Assessment** - Detailed risk analysis and position sizing recommendations
@@ -186,15 +192,15 @@ app = FastAPI(
 * **Batch endpoints**: 10 requests per minute
 * **Health checks**: Unlimited
     """,
-    version="4.0.0",
+    version="5.0.0",
     contact={
-        "name": "4-Agent AI Hedge Fund System",
+        "name": "5-agent AI Hedge Fund System",
         "url": "https://github.com/yourusername/ai-hedge-fund",
     },
     tags_metadata=[
         {
             "name": "Investment Analysis",
-            "description": "4-agent investment analysis with narrative generation",
+            "description": "5-agent investment analysis with narrative generation",
         },
         {
             "name": "Portfolio Management",
@@ -223,20 +229,71 @@ if RATE_LIMITING_ENABLED:
 else:
     logger.warning("Rate limiting disabled - slowapi not installed")
 
-# Configure CORS - more secure for production
-# Get allowed origins from environment variable, fallback to permissive for local dev
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*')
-if ALLOWED_ORIGINS != '*':
-    # Split comma-separated origins from environment
-    allowed_origins_list = [origin.strip() for origin in ALLOWED_ORIGINS.split(',')]
-else:
-    # Development mode - allow all
+# Request tracing middleware
+class RequestTracingMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to add request tracing with X-Request-ID headers.
+
+    - Generates unique ID for each request
+    - Accepts existing X-Request-ID from client
+    - Adds X-Request-ID to response headers
+    - Logs request ID for all requests
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # Get or generate request ID
+        request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
+
+        # Store in request state for access in endpoints
+        request.state.request_id = request_id
+
+        # Log request with ID
+        logger.info(f"[{request_id}] {request.method} {request.url.path}")
+
+        # Process request
+        try:
+            response = await call_next(request)
+
+            # Add request ID to response headers
+            response.headers['X-Request-ID'] = request_id
+
+            # Log response
+            logger.info(f"[{request_id}] Response: {response.status_code}")
+
+            return response
+        except Exception as e:
+            # Log error with request ID
+            logger.error(f"[{request_id}] Error: {str(e)}")
+            raise
+
+# Add request tracing middleware
+app.add_middleware(RequestTracingMiddleware)
+
+# Configure CORS - secure defaults
+# Get allowed origins from environment variable
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5174,http://localhost:3000,http://localhost:5173')
+
+# Warn if using wildcard in production
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+if ALLOWED_ORIGINS == '*' and ENVIRONMENT == 'production':
+    logger.error("🚨 SECURITY WARNING: CORS wildcard (*) enabled in production! Set ALLOWED_ORIGINS environment variable.")
+
+if ALLOWED_ORIGINS == '*':
+    # Wildcard mode (only for development)
     allowed_origins_list = ["*"]
+    allow_credentials_flag = False  # Can't use credentials with wildcard
+    if ENVIRONMENT == 'development':
+        logger.warning("⚠️  CORS: Wildcard (*) mode active - development only!")
+else:
+    # Secure mode - specific origins
+    allowed_origins_list = [origin.strip() for origin in ALLOWED_ORIGINS.split(',')]
+    allow_credentials_flag = True
+    logger.info(f"✅ CORS: Restricted to origins: {allowed_origins_list}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins_list,
-    allow_credentials=True,
+    allow_credentials=allow_credentials_flag,  # Only allow with specific origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -245,36 +302,39 @@ app.add_middleware(
 LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini')  # Options: openai, anthropic, gemini
 
 # Global instances
+from agents.institutional_flow_agent import InstitutionalFlowAgent
+
 fundamentals_agent = FundamentalsAgent()
 momentum_agent = MomentumAgent()
 quality_agent = QualityAgent()
 sentiment_agent = SentimentAgent(llm_provider=LLM_PROVIDER)
+institutional_flow_agent = InstitutionalFlowAgent()
 narrative_engine = InvestmentNarrativeEngine(llm_provider=LLM_PROVIDER)
 portfolio_manager = PortfolioManager()
 stock_scorer = StockScorer()
 data_provider = EnhancedYahooProvider()
 
-# Initialize parallel executor with error handling
+# Initialize parallel executor with error handling (5 agents)
 parallel_executor = ParallelAgentExecutor(
     fundamentals_agent=fundamentals_agent,
     momentum_agent=momentum_agent,
     quality_agent=quality_agent,
     sentiment_agent=sentiment_agent,
+    institutional_flow_agent=institutional_flow_agent,
     max_retries=3,
     timeout_seconds=30
 )
 
-def get_cached_analysis(symbol: str):
-    """Get cached analysis if available and not expired"""
-    if symbol in analysis_cache:
-        cached_data, timestamp = analysis_cache[symbol]
-        if time.time() - timestamp < CACHE_TTL_SECONDS:
-            return cached_data
-    return None
+async def get_cached_analysis(symbol: str):
+    """Get cached analysis if available and not expired (thread-safe)"""
+    async with cache_lock:
+        # TTLCache automatically handles expiration
+        return analysis_cache.get(symbol)
 
-def set_cached_analysis(symbol: str, analysis_data: dict):
-    """Cache analysis data with timestamp"""
-    analysis_cache[symbol] = (analysis_data, time.time())
+async def set_cached_analysis(symbol: str, analysis_data: dict):
+    """Cache analysis data (thread-safe with automatic TTL)"""
+    async with cache_lock:
+        analysis_cache[symbol] = analysis_data
 
 def sanitize_float(value):
     """Sanitize float values for JSON serialization"""
@@ -390,7 +450,7 @@ async def root():
     return """
     <html>
         <head>
-            <title>4-Agent AI Hedge Fund System</title>
+            <title>5-agent AI Hedge Fund System</title>
             <style>
                 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 40px; background: #f8f9fa; }
                 .container { max-width: 1200px; margin: 0 auto; }
@@ -409,12 +469,12 @@ async def root():
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🏦 4-Agent AI Hedge Fund System v4.0.0</h1>
+                    <h1>🏦 5-agent AI Hedge Fund System v5.0.0</h1>
                     <p>Professional-grade investment analysis with multi-agent intelligence and narrative generation</p>
                 </div>
 
                 <div class="agent-section">
-                    <h3>🤖 4-Agent Analysis Framework</h3>
+                    <h3>🤖 5-agent Analysis Framework</h3>
                     <p><strong>Fundamentals Agent (40%)</strong> - Financial health, profitability, growth, and valuation</p>
                     <p><strong>Momentum Agent (30%)</strong> - Technical analysis and price trend evaluation</p>
                     <p><strong>Quality Agent (20%)</strong> - Business characteristics and operational efficiency</p>
@@ -434,7 +494,7 @@ async def root():
                 <div class="endpoint-group">
                     <h2>🎯 Investment Analysis Endpoints</h2>
                     <div class="endpoint">
-                        <span class="method post">POST</span> <strong>/analyze</strong> - Complete 4-agent analysis with narrative<br>
+                        <span class="method post">POST</span> <strong>/analyze</strong> - Complete 5-agent analysis with narrative<br>
                         <em>Generate comprehensive investment thesis for single stock</em>
                     </div>
                     <div class="endpoint">
@@ -455,7 +515,7 @@ async def root():
                     </div>
                     <div class="endpoint">
                         <span class="method get">GET</span> <strong>/portfolio/top-picks</strong> - Top investment picks<br>
-                        <em>Curated stock picks based on 4-agent analysis</em>
+                        <em>Curated stock picks based on 5-agent analysis</em>
                     </div>
                 </div>
 
@@ -540,9 +600,17 @@ async def health_check():
             agents_status["sentiment"] = "unhealthy"
             logger.warning(f"Sentiment agent health check failed: {e}")
 
+        # Test Institutional Flow Agent
+        try:
+            inst_flow_result = institutional_flow_agent.analyze("AAPL", test_data)
+            agents_status["institutional_flow"] = "healthy" if inst_flow_result.get('score', 0) >= 0 else "degraded"
+        except Exception as e:
+            agents_status["institutional_flow"] = "unhealthy"
+            logger.warning(f"Institutional flow agent health check failed: {e}")
+
         # Overall status
         healthy_agents = sum(1 for status in agents_status.values() if status == "healthy")
-        overall_status = "healthy" if healthy_agents >= 3 else "degraded" if healthy_agents >= 2 else "unhealthy"
+        overall_status = "healthy" if healthy_agents >= 4 else "degraded" if healthy_agents >= 3 else "unhealthy"
 
         # Add environment info for monitoring
         environment_info = {
@@ -556,7 +624,7 @@ async def health_check():
         return HealthResponse(
             status=overall_status,
             timestamp=datetime.now().isoformat(),
-            version="4.0.0",
+            version="5.0.0",
             agents_status=agents_status,
             environment=environment_info
         )
@@ -566,7 +634,7 @@ async def health_check():
         return HealthResponse(
             status="unhealthy",
             timestamp=datetime.now().isoformat(),
-            version="4.0.0",
+            version="5.0.0",
             agents_status={"error": str(e)},
             environment={"error": "Unable to load environment info"}
         )
@@ -582,25 +650,31 @@ async def get_metrics():
     try:
         # Calculate cache statistics
         cache_size = len(analysis_cache)
+        cache_utilization = (cache_size / CACHE_MAX_SIZE * 100) if CACHE_MAX_SIZE > 0 else 0
         cache_keys = list(analysis_cache.keys())[:10]  # First 10 for preview
 
-        # Simple stats
+        # Enhanced metrics
         metrics = {
             "timestamp": datetime.now().isoformat(),
-            "version": "4.0.0",
+            "version": "5.0.0",
             "cache": {
-                "size": cache_size,
+                "current_size": cache_size,
+                "max_size": CACHE_MAX_SIZE,
+                "utilization_percent": round(cache_utilization, 2),
                 "ttl_seconds": CACHE_TTL_SECONDS,
-                "sample_keys": cache_keys
+                "sample_keys": cache_keys,
+                "status": "healthy" if cache_utilization < 80 else "warning" if cache_utilization < 95 else "critical"
             },
             "agents": {
-                "count": 4,
-                "names": ["fundamentals", "momentum", "quality", "sentiment"]
+                "count": 5,
+                "names": ["fundamentals", "momentum", "quality", "sentiment", "institutional_flow"]
             },
             "system": {
                 "llm_provider": LLM_PROVIDER,
                 "adaptive_weights": os.getenv('ENABLE_ADAPTIVE_WEIGHTS', 'false') == 'true',
-                "python_version": f"{sys.version_info.major}.{sys.version_info.minor}"
+                "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+                "rate_limiting_enabled": RATE_LIMITING_ENABLED,
+                "sentry_enabled": SENTRY_ENABLED
             }
         }
 
@@ -686,7 +760,7 @@ async def get_market_regime(force_refresh: bool = False):
 
 @app.post("/analyze", tags=["Investment Analysis"])
 async def analyze_stock(request: AnalysisRequest, req: Request = None):
-    """Complete 4-agent analysis with investment narrative generation (PARALLEL EXECUTION)
+    """Complete 5-agent analysis with investment narrative generation (PARALLEL EXECUTION)
 
     Rate limit: 60 requests per minute per IP (when slowapi is installed)
     """
@@ -694,12 +768,12 @@ async def analyze_stock(request: AnalysisRequest, req: Request = None):
         symbol = request.symbol
 
         # Check cache first
-        cached_analysis = get_cached_analysis(symbol)
+        cached_analysis = await get_cached_analysis(symbol)
         if cached_analysis:
             logger.info(f"✅ Cache hit for {symbol}")
             return cached_analysis
 
-        logger.info(f"🚀 Starting parallel 4-agent analysis for {symbol}")
+        logger.info(f"🚀 Starting parallel 5-agent analysis for {symbol}")
 
         # Get comprehensive market data
         comprehensive_data = data_provider.get_comprehensive_data(symbol)
@@ -716,14 +790,14 @@ async def analyze_stock(request: AnalysisRequest, req: Request = None):
 
         logger.info(
             f"✨ Parallel execution completed in {execution_time:.2f}s "
-            f"({4 - len(failed_agents)}/4 agents succeeded)"
+            f"({5 - len(failed_agents)}/5 agents succeeded)"
         )
 
         # Check if we have enough successful agents
-        if len(failed_agents) >= 3:
+        if len(failed_agents) >= 3:  # At least 3/5 agents must succeed
             raise HTTPException(
                 status_code=503,
-                detail=f"Analysis failed: Too many agents failed ({len(failed_agents)}/4)"
+                detail=f"Analysis failed: Too many agents failed ({len(failed_agents)}/5)"
             )
 
         # Generate comprehensive narrative (even with some failed agents)
@@ -760,7 +834,7 @@ async def analyze_stock(request: AnalysisRequest, req: Request = None):
         }
 
         # Cache the result
-        set_cached_analysis(symbol, analysis_result)
+        await set_cached_analysis(symbol, analysis_result)
 
         return analysis_result
 
@@ -784,7 +858,7 @@ async def get_agent_consensus(symbols: str = "AAPL,MSFT,GOOGL"):
 
         # Analyze all requested symbols
         batch_request = BatchAnalysisRequest(symbols=symbol_list)
-        batch_result = await batch_analyze(batch_request)
+        batch_result = await batch_analyze(batch_request, req=None)
 
         consensus_data = []
 
@@ -797,10 +871,10 @@ async def get_agent_consensus(symbols: str = "AAPL,MSFT,GOOGL"):
             agents_data = []
             agent_scores_list = []
 
-            for agent_name in ['fundamentals', 'momentum', 'quality', 'sentiment']:
+            for agent_name in ['fundamentals', 'momentum', 'quality', 'sentiment', 'institutional_flow']:
                 if agent_name in agent_results:
                     agent_info = agent_results[agent_name]
-                    weight_map = {'fundamentals': 40, 'momentum': 30, 'quality': 20, 'sentiment': 10}
+                    weight_map = {'fundamentals': 36, 'momentum': 27, 'quality': 18, 'sentiment': 9, 'institutional_flow': 10}
 
                     score = agent_info.get('score', 50)
                     confidence = agent_info.get('confidence', 0.5)
@@ -907,7 +981,7 @@ async def batch_analyze(request: BatchAnalysisRequest, req: Request = None):
         # Check cache first
         symbols_needing_analysis = []
         for symbol in request.symbols:
-            cached_analysis = get_cached_analysis(symbol)
+            cached_analysis = await get_cached_analysis(symbol)
             if cached_analysis:
                 results.append(cached_analysis)
                 cached_count += 1
@@ -956,7 +1030,7 @@ async def analyze_portfolio(request: PortfolioRequest):
 
         # Get individual analyses for all symbols
         batch_request = BatchAnalysisRequest(symbols=request.symbols)
-        batch_result = await batch_analyze(batch_request)
+        batch_result = await batch_analyze(batch_request, req=None)
 
         analyses = batch_result["analyses"]
 
@@ -1025,14 +1099,14 @@ async def analyze_portfolio(request: PortfolioRequest):
 
 @app.get("/portfolio/top-picks", tags=["Portfolio Management"])
 async def get_top_picks(limit: int = 12):
-    """Get top investment picks based on 4-agent analysis from 50-stock universe"""
+    """Get top investment picks based on 5-agent analysis from 50-stock universe"""
     try:
         logger.info(f"Generating top {limit} investment picks from 50-stock universe")
 
         # Analyze all Top 50 Elite Stocks
         top_symbols = US_TOP_100_STOCKS  # All 50 elite stocks for analysis
         batch_request = BatchAnalysisRequest(symbols=top_symbols)
-        batch_result = await batch_analyze(batch_request)
+        batch_result = await batch_analyze(batch_request, req=None)
 
         analyses = batch_result["analyses"]
 
@@ -1080,7 +1154,7 @@ async def get_top_picks(limit: int = 12):
         return {
             "top_picks": top_picks,
             "total_analyzed": len(analyses),
-            "selection_criteria": "Based on 4-agent comprehensive analysis with weighted scoring",
+            "selection_criteria": "Based on 5-agent comprehensive analysis with weighted scoring",
             "timestamp": datetime.now().isoformat()
         }
 
@@ -1172,7 +1246,7 @@ async def get_sector_analysis():
         # Analyze all 50 stocks
         all_symbols = US_TOP_100_STOCKS
         batch_request = BatchAnalysisRequest(symbols=all_symbols)
-        batch_result = await batch_analyze(batch_request)
+        batch_result = await batch_analyze(batch_request, req=None)
 
         analyses = batch_result["analyses"]
 
@@ -1617,13 +1691,13 @@ class BacktestResults(BaseModel):
 @app.post("/backtest/run", response_model=BacktestResults, tags=["Backtesting"])
 async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks):
     """
-    Run a comprehensive backtest of the 4-agent strategy using REAL historical data
+    Run a comprehensive backtest of the 5-agent strategy using REAL historical data
 
     🔧 FIX (2025-10-10): This endpoint now redirects to the real historical backtest engine
-    instead of generating synthetic returns. Uses actual 4-agent analysis on historical data.
+    instead of generating synthetic returns. Uses actual 5-agent analysis on historical data.
     """
     try:
-        logger.info(f"🚀 Running real historical backtest with 4-agent analysis: {config.start_date} to {config.end_date}")
+        logger.info(f"🚀 Running real historical backtest with 5-agent analysis: {config.start_date} to {config.end_date}")
 
         # Check if historical backtest engine is available
         if not HISTORICAL_BACKTEST_AVAILABLE:
@@ -1648,7 +1722,7 @@ async def run_backtest(config: BacktestConfig, background_tasks: BackgroundTasks
             enable_regime_detection=True  # Enables adaptive weights
         )
 
-        # Run real historical backtest with 4-agent analysis
+        # Run real historical backtest with 5-agent analysis
         engine = HistoricalBacktestEngine(engine_config)
         result = engine.run_backtest()
 
@@ -1816,7 +1890,7 @@ async def run_historical_backtest(config: BacktestConfig):
     """
     Run comprehensive historical backtest using real market data
 
-    This endpoint performs a full historical simulation of the 4-agent strategy
+    This endpoint performs a full historical simulation of the 5-agent strategy
     using actual price data and point-in-time agent scoring.
     """
     if not HISTORICAL_BACKTEST_AVAILABLE:
@@ -2008,12 +2082,12 @@ async def get_stress_test_results(backtest_id: str):
 async def compare_strategies(
     start_date: str = "2020-01-01",
     end_date: str = "2024-12-31",
-    strategies: List[str] = ["4-agent", "equal-weight", "buy-and-hold"]
+    strategies: List[str] = ["5-agent", "equal-weight", "buy-and-hold"]
 ):
     """
     Compare multiple investment strategies
 
-    Compares the 4-agent system against simple benchmarks
+    Compares the 5-agent system against simple benchmarks
     """
     if not HISTORICAL_BACKTEST_AVAILABLE:
         # Return sample comparison data
@@ -2021,7 +2095,7 @@ async def compare_strategies(
             "start_date": start_date,
             "end_date": end_date,
             "strategies": {
-                "4-agent": {
+                "5-agent": {
                     "total_return": 0.185,
                     "cagr": 0.165,
                     "sharpe_ratio": 1.45,
@@ -2043,7 +2117,7 @@ async def compare_strategies(
                     "volatility": 0.195
                 }
             },
-            "winner": "4-agent",
+            "winner": "5-agent",
             "outperformance": {
                 "vs_equal_weight": 0.043,
                 "vs_buy_and_hold": 0.087
@@ -2318,7 +2392,7 @@ async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
 
         # Batch analyze stocks
         batch_request = BatchAnalysisRequest(symbols=symbols_to_analyze)
-        batch_result = await batch_analyze(batch_request)
+        batch_result = await batch_analyze(batch_request, req=None)
         analyses = batch_result["analyses"]
 
         # Scan for opportunities
@@ -2377,7 +2451,7 @@ async def execute_auto_buys(universe_limit: int = 50):
         symbols_to_analyze = [s for s in US_TOP_100_STOCKS[:universe_limit] if s not in owned_symbols]
 
         batch_request = BatchAnalysisRequest(symbols=symbols_to_analyze)
-        batch_result = await batch_analyze(batch_request)
+        batch_result = await batch_analyze(batch_request, req=None)
         analyses = batch_result["analyses"]
 
         # Scan for opportunities
@@ -2724,7 +2798,7 @@ async def execute_automated_trading(universe_limit: int = 50):
 
             if symbols_to_analyze:
                 batch_request = BatchAnalysisRequest(symbols=symbols_to_analyze)
-                batch_result = await batch_analyze(batch_request)
+                batch_result = await batch_analyze(batch_request, req=None)
                 analyses = batch_result["analyses"]
 
                 # Scan for opportunities
@@ -2943,6 +3017,79 @@ async def mark_all_alerts_read():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# PAPER TRADING ENDPOINTS
+# ============================================================================
+
+@app.get("/paper-trading/positions", tags=["Paper Trading"])
+async def get_paper_positions():
+    """Get all paper trading positions with P&L
+
+    Returns:
+        dict: Paper trading portfolio with positions, cash, and P&L metrics
+    """
+    try:
+        # Placeholder response - full implementation uses PaperPortfolioManager
+        return {
+            "positions": [],
+            "cash": 10000.0,
+            "total_value": 10000.0,
+            "total_pl": 0.0,
+            "total_pl_percent": 0.0,
+            "message": "Paper trading positions endpoint - placeholder implementation"
+        }
+    except Exception as e:
+        logger.error(f"Get paper positions error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/paper-trading/trade", tags=["Paper Trading"])
+async def execute_paper_trade(trade_request: dict):
+    """Execute a paper trade (buy/sell)
+
+    Args:
+        trade_request: Trade details (symbol, action, quantity, price)
+
+    Returns:
+        dict: Trade execution result
+    """
+    try:
+        # Placeholder response - full implementation uses PaperPortfolioManager
+        return {
+            "success": True,
+            "message": "Paper trading coming soon - trade request received",
+            "trade": trade_request
+        }
+    except Exception as e:
+        logger.error(f"Execute paper trade error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/paper-trading/performance", tags=["Paper Trading"])
+async def get_paper_performance():
+    """Get paper trading performance metrics
+
+    Returns:
+        dict: Performance metrics (total return, win rate, Sharpe ratio, etc.)
+    """
+    try:
+        # Placeholder response - full implementation uses PaperPortfolioManager
+        return {
+            "total_return": 0.0,
+            "total_return_percent": 0.0,
+            "win_rate": 0.0,
+            "sharpe_ratio": 0.0,
+            "max_drawdown": 0.0,
+            "num_trades": 0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "message": "Paper trading performance endpoint - placeholder implementation"
+        }
+    except Exception as e:
+        logger.error(f"Get paper performance error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Add sample alerts on startup for demonstration
 def add_sample_alerts():
     """Add some sample alerts for demonstration"""
@@ -2961,8 +3108,8 @@ def add_sample_alerts():
 @app.on_event("startup")
 async def startup_event():
     """Startup event"""
-    logger.info("🏦 4-Agent AI Hedge Fund System starting up...")
-    logger.info("✅ All 4 agents initialized")
+    logger.info("🏦 5-Agent AI Hedge Fund System starting up...")
+    logger.info("✅ All 5 agents initialized")
     logger.info("✅ Narrative engine ready")
     logger.info("✅ Portfolio manager ready")
     logger.info("✅ Auto-sell monitor ready")
@@ -2974,7 +3121,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event"""
-    logger.info("🛑 4-Agent AI Hedge Fund System shutting down...")
+    logger.info("🛑 5-Agent AI Hedge Fund System shutting down...")
 
 if __name__ == "__main__":
     import uvicorn

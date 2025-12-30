@@ -7,14 +7,131 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import talib
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable, Any
 import logging
 from datetime import datetime, timedelta
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def with_timeout(timeout_seconds: int = 15):
+    """
+    Decorator to add timeout to function calls using ThreadPoolExecutor.
+
+    Args:
+        timeout_seconds: Maximum time to wait for function to complete
+
+    Returns:
+        Wrapped function that raises TimeoutError if execution exceeds timeout
+    """
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args, **kwargs) -> Any:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(func, *args, **kwargs)
+                try:
+                    return future.result(timeout=timeout_seconds)
+                except FuturesTimeoutError:
+                    logger.error(f"{func.__name__} timed out after {timeout_seconds}s")
+                    raise TimeoutError(f"{func.__name__} exceeded {timeout_seconds}s timeout")
+        return wrapper
+    return decorator
+
+class CircuitBreaker:
+    """
+    Circuit breaker pattern for API calls.
+
+    States:
+    - CLOSED: Normal operation (requests go through)
+    - OPEN: Too many failures (reject requests immediately)
+    - HALF_OPEN: Testing recovery (allow limited requests)
+    """
+
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60, half_open_max_calls: int = 3):
+        """
+        Initialize circuit breaker.
+
+        Args:
+            failure_threshold: Number of failures before opening circuit
+            recovery_timeout: Seconds to wait before attempting recovery
+            half_open_max_calls: Max calls to allow in half-open state
+        """
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_max_calls = half_open_max_calls
+
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "CLOSED"
+        self.half_open_calls = 0
+
+    def call(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute function with circuit breaker protection.
+
+        Args:
+            func: Function to execute
+            *args, **kwargs: Arguments to pass to function
+
+        Returns:
+            Result of function or None if circuit is open
+
+        Raises:
+            Exception: If circuit is open
+        """
+        if self.state == "OPEN":
+            # Check if recovery timeout has passed
+            if self.last_failure_time and (time.time() - self.last_failure_time) > self.recovery_timeout:
+                logger.info("Circuit breaker entering HALF_OPEN state")
+                self.state = "HALF_OPEN"
+                self.half_open_calls = 0
+            else:
+                raise Exception(f"Circuit breaker is OPEN. Service unavailable.")
+
+        if self.state == "HALF_OPEN":
+            if self.half_open_calls >= self.half_open_max_calls:
+                raise Exception(f"Circuit breaker HALF_OPEN: max calls exceeded")
+            self.half_open_calls += 1
+
+        try:
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception as e:
+            self._on_failure()
+            raise e
+
+    def _on_success(self):
+        """Handle successful call."""
+        if self.state == "HALF_OPEN":
+            logger.info("Circuit breaker: Recovery successful, closing circuit")
+            self.state = "CLOSED"
+            self.failure_count = 0
+            self.half_open_calls = 0
+        elif self.state == "CLOSED":
+            # Reset failure count on success
+            self.failure_count = max(0, self.failure_count - 1)
+
+    def _on_failure(self):
+        """Handle failed call."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+
+        if self.state == "HALF_OPEN":
+            logger.warning("Circuit breaker: Recovery failed, reopening circuit")
+            self.state = "OPEN"
+        elif self.failure_count >= self.failure_threshold:
+            logger.error(f"Circuit breaker: Opening circuit after {self.failure_count} failures")
+            self.state = "OPEN"
+
+    def reset(self):
+        """Manually reset circuit breaker."""
+        self.state = "CLOSED"
+        self.failure_count = 0
+        self.half_open_calls = 0
+        logger.info("Circuit breaker manually reset")
 
 def safe_extract_value(data, column, index=-1, default=0):
     """Safely extract value from pandas data, handling numpy arrays properly"""
@@ -43,11 +160,60 @@ def safe_extract_value(data, column, index=-1, default=0):
 class EnhancedYahooProvider:
     """Enhanced data provider for comprehensive stock analysis using Yahoo Finance"""
 
-    def __init__(self, rate_limit_delay: float = 0.5):
+    def __init__(self, rate_limit_delay: float = 0.5, api_timeout: int = 15, enable_circuit_breaker: bool = True):
         self.rate_limit_delay = rate_limit_delay
+        self.api_timeout = api_timeout  # Timeout for yfinance API calls (seconds)
         self.cache = {}
         self.cache_expiry = {}
         self.cache_duration = 1200  # 20 minutes cache (extended for 50-stock universe)
+
+        # Circuit breaker for yfinance API resilience
+        self.enable_circuit_breaker = enable_circuit_breaker
+        if enable_circuit_breaker:
+            self.circuit_breaker = CircuitBreaker(
+                failure_threshold=5,  # Open after 5 failures
+                recovery_timeout=60,  # Try recovery after 60s
+                half_open_max_calls=3  # Allow 3 test calls during recovery
+            )
+            logger.info("Circuit breaker enabled for yfinance API calls")
+        else:
+            self.circuit_breaker = None
+
+    def _fetch_with_timeout(self, fetch_func: Callable, description: str) -> Any:
+        """
+        Execute a function with timeout and circuit breaker protection.
+
+        Args:
+            fetch_func: Function to execute (should be a lambda or callable)
+            description: Description of what's being fetched (for logging)
+
+        Returns:
+            Result of fetch_func or None if timeout/error/circuit open occurs
+        """
+        def _execute_with_timeout():
+            """Inner function for timeout execution."""
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fetch_func)
+                try:
+                    result = future.result(timeout=self.api_timeout)
+                    return result
+                except FuturesTimeoutError:
+                    logger.error(f"Timeout fetching {description} after {self.api_timeout}s")
+                    raise TimeoutError(f"Timeout fetching {description}")
+
+        try:
+            # Use circuit breaker if enabled
+            if self.enable_circuit_breaker and self.circuit_breaker:
+                return self.circuit_breaker.call(_execute_with_timeout)
+            else:
+                return _execute_with_timeout()
+        except Exception as e:
+            # Log circuit breaker state if applicable
+            if self.enable_circuit_breaker and self.circuit_breaker:
+                logger.warning(f"Fetch failed ({description}): {str(e)} | Circuit state: {self.circuit_breaker.state}")
+            else:
+                logger.error(f"Error fetching {description}: {str(e)}")
+            return None
 
     def get_comprehensive_data(self, symbol: str) -> Dict:
         """Get comprehensive stock data including all technical indicators"""
@@ -63,14 +229,22 @@ class EnhancedYahooProvider:
             # Get stock data
             ticker = yf.Ticker(symbol)
 
-            # Get historical data (2 years for momentum + technical indicators)
-            hist = ticker.history(period="2y", interval="1d")
-            if hist.empty:
+            # Get historical data (2 years for momentum + technical indicators) with timeout
+            hist = self._fetch_with_timeout(
+                lambda: ticker.history(period="2y", interval="1d"),
+                f"history data for {symbol}"
+            )
+            if hist is None or hist.empty:
                 logger.warning(f"No historical data found for {symbol}")
                 return self._create_empty_data(symbol)
 
-            # Get stock info
-            info = ticker.info
+            # Get stock info with timeout
+            info = self._fetch_with_timeout(
+                lambda: ticker.info,
+                f"info for {symbol}"
+            )
+            if info is None:
+                info = {}
 
             # Calculate all technical indicators
             technical_data = self._calculate_all_indicators(hist)
@@ -78,9 +252,15 @@ class EnhancedYahooProvider:
             # Get current price data
             current_data = self._get_current_price_data(hist, info)
 
-            # Get financials data for Quality Agent
-            financials = ticker.financials
-            quarterly_financials = ticker.quarterly_financials
+            # Get financials data for Quality Agent with timeout
+            financials = self._fetch_with_timeout(
+                lambda: ticker.financials,
+                f"financials for {symbol}"
+            )
+            quarterly_financials = self._fetch_with_timeout(
+                lambda: ticker.quarterly_financials,
+                f"quarterly financials for {symbol}"
+            )
 
             # Combine all data
             comprehensive_data = {

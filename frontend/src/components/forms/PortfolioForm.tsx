@@ -111,7 +111,7 @@ export const PortfolioForm: React.FC<PortfolioFormProps> = ({
             Portfolio Composition
           </h2>
           <p className="text-muted-foreground text-sm">
-            Add 2-20 stocks to analyze your portfolio using our 4-agent system
+            Add 2-20 stocks to analyze your portfolio using our 5-agent system
           </p>
         </div>
 

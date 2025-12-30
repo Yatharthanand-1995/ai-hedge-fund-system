@@ -2,13 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn, formatCurrency, formatPercentage } from '../../utils';
 import { ExpandedStockRow } from './ExpandedStockRow';
-
-interface AgentScores {
-  fundamentals: number;
-  momentum: number;
-  quality: number;
-  sentiment: number;
-}
+import { type AgentScores } from '../../types/api';
 
 interface MarketData {
   current_price: number;

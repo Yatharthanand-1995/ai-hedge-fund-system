@@ -92,7 +92,7 @@ export const PaperTradingPage: React.FC = () => {
     refetchInterval: 5000,
   });
 
-  // Fetch AI recommendations (top picks from 4-agent system)
+  // Fetch AI recommendations (top picks from 5-agent system)
   const { data: topPicksData, isLoading: topPicksLoading } = useQuery({
     queryKey: ['aiTopPicks'],
     queryFn: async () => {
@@ -384,7 +384,7 @@ export const PaperTradingPage: React.FC = () => {
         ) : null}
       </div>
 
-      {/* AI Recommendations from 4-Agent System */}
+      {/* AI Recommendations from 5-Agent System */}
       <div className="professional-card p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold flex items-center space-x-2">
@@ -404,7 +404,7 @@ export const PaperTradingPage: React.FC = () => {
         {topPicksLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
-            <span className="ml-3 text-muted-foreground">Analyzing 50 stocks with 4-agent system...</span>
+            <span className="ml-3 text-muted-foreground">Analyzing 50 stocks with 5-agent system...</span>
           </div>
         ) : topPicks.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">

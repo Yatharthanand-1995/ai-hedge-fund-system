@@ -21,6 +21,7 @@ import {
   Settings,
   Code,
   Info,
+  Users,
 } from 'lucide-react';
 
 interface TechnicalDeepDiveProps {
@@ -100,7 +101,7 @@ const SystemDetailsPage: React.FC = () => {
 
   const sidebarItems = [
     { id: 'architecture', label: 'System Architecture', icon: BookOpen },
-    { id: 'agents', label: '4-Agent Analysis System', icon: Bot },
+    { id: 'agents', label: '5-Agent Analysis System', icon: Bot },
     { id: 'adaptive-weights', label: 'Adaptive Weights & Market Regime', icon: Target },
     { id: 'backtesting', label: 'Backtesting Engine v2.0', icon: BarChart3 },
     { id: 'api', label: 'API & Integration Guide', icon: Plug },
@@ -191,15 +192,16 @@ const SystemDetailsPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                      <span className="text-purple-400 font-semibold">4 Specialized Agents</span>
+                      <span className="text-purple-400 font-semibold">5 Specialized Agents</span>
                       <span className="text-gray-500">(parallel processing)</span>
                     </div>
                     <div className="pl-5 grid grid-cols-2 gap-2 text-xs mt-2">
-                      <div className="text-orange-400">• Fundamentals (40%)</div>
-                      <div className="text-blue-400">• Momentum (30%)</div>
-                      <div className="text-emerald-400">• Quality (20%)</div>
-                      <div className="text-yellow-400">• Sentiment (10%)</div>
-                    </div>
+                  <div className="text-orange-400">• Fundamentals (36%)</div>
+                  <div className="text-blue-400">• Momentum (27%)</div>
+                  <div className="text-emerald-400">• Quality (18%)</div>
+                  <div className="text-yellow-400">• Sentiment (9%)</div>
+                  <div className="text-pink-400">• Institutional Flow (10%)</div>
+                </div>
                     <div className="pl-5 flex items-center gap-2">
                       <span className="text-gray-500">↓</span>
                     </div>
@@ -258,7 +260,7 @@ const SystemDetailsPage: React.FC = () => {
                       core/stock_scorer.py:StockScorer
                     </code>
                     <p className="text-xs text-gray-400 mt-1">
-                      Coordinates all 4 agents, combines weighted scores, returns confidence-weighted recommendations.
+                      Coordinates all 5 agents, combines weighted scores, returns confidence-weighted recommendations.
                     </p>
                   </div>
                   <div>
@@ -275,12 +277,12 @@ const SystemDetailsPage: React.FC = () => {
             </div>
           </section>
 
-          {/* 4-Agent Analysis System */}
+          {/* 5-Agent Analysis System */}
           <section id="agents" className="professional-card">
             <div className="flex items-start gap-3 mb-6">
               <Bot className="w-6 h-6 text-purple-400 flex-shrink-0 mt-1" />
               <div className="flex-1">
-                <h2 className="text-2xl font-bold text-foreground mb-2">4-Agent Analysis System</h2>
+                <h2 className="text-2xl font-bold text-foreground mb-2">5-Agent Analysis System</h2>
                 <p className="text-muted-foreground">
                   Each agent is a specialized analyzer that evaluates different aspects of a stock's investment potential.
                   Agents run in parallel and return standardized outputs with confidence scores.
@@ -294,7 +296,7 @@ const SystemDetailsPage: React.FC = () => {
                 <div className="flex items-center gap-2 mb-3">
                   <Brain className="w-5 h-5 text-orange-400" />
                   <h3 className="text-lg font-bold text-orange-300">Fundamentals Agent</h3>
-                  <span className="ml-auto text-orange-400 font-bold text-lg">40%</span>
+                  <span className="ml-auto text-orange-400 font-bold text-lg">36%</span>
                 </div>
                 <p className="text-sm text-gray-300 mb-3">
                   Analyzes financial health, profitability, growth, and valuation metrics.
@@ -335,7 +337,7 @@ const SystemDetailsPage: React.FC = () => {
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp className="w-5 h-5 text-blue-400" />
                   <h3 className="text-lg font-bold text-blue-300">Momentum Agent</h3>
-                  <span className="ml-auto text-blue-400 font-bold text-lg">30%</span>
+                  <span className="ml-auto text-blue-400 font-bold text-lg">27%</span>
                 </div>
                 <p className="text-sm text-gray-300 mb-3">
                   Technical analysis and price trend evaluation using advanced indicators.
@@ -376,7 +378,7 @@ const SystemDetailsPage: React.FC = () => {
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="w-5 h-5 text-emerald-400" />
                   <h3 className="text-lg font-bold text-emerald-300">Quality Agent</h3>
-                  <span className="ml-auto text-emerald-400 font-bold text-lg">20%</span>
+                  <span className="ml-auto text-emerald-400 font-bold text-lg">18%</span>
                 </div>
                 <p className="text-sm text-gray-300 mb-3">
                   Business quality and operational efficiency assessment.
@@ -417,7 +419,7 @@ const SystemDetailsPage: React.FC = () => {
                 <div className="flex items-center gap-2 mb-3">
                   <MessageSquare className="w-5 h-5 text-yellow-400" />
                   <h3 className="text-lg font-bold text-yellow-300">Sentiment Agent</h3>
-                  <span className="ml-auto text-yellow-400 font-bold text-lg">10%</span>
+                  <span className="ml-auto text-yellow-400 font-bold text-lg">9%</span>
                 </div>
                 <p className="text-sm text-gray-300 mb-3">
                   Market sentiment and analyst outlook analysis with optional AI integration.
@@ -452,6 +454,47 @@ const SystemDetailsPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Institutional Flow Agent */}
+              <div className="border border-pink-500/30 rounded-lg p-5 bg-pink-950/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="w-5 h-5 text-pink-400" />
+                  <h3 className="text-lg font-bold text-pink-300">Institutional Flow Agent</h3>
+                  <span className="ml-auto text-pink-400 font-bold text-lg">10%</span>
+                </div>
+                <p className="text-sm text-gray-300 mb-3">
+                  Detects institutional buying/selling patterns ("smart money") using volume flow analysis.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <TrendingUp className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-pink-200">Key Metrics:</strong>
+                      <div className="text-gray-400 text-xs mt-1">
+                        OBV, Accumulation/Distribution, MFI, Chaikin Money Flow, VWAP, Volume Z-score
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Activity className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-pink-200">Analysis Focus:</strong>
+                      <div className="text-gray-400 text-xs mt-1">
+                        Volume flow trends, unusual institutional activity, smart money positioning
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Code className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-pink-200">File Location:</strong>
+                      <div className="text-gray-400 text-xs mt-1 font-mono">
+                        agents/institutional_flow_agent.py
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <TechnicalDeepDive title="Agent Scoring Formula & Confidence Calculation">
@@ -477,17 +520,19 @@ const SystemDetailsPage: React.FC = () => {
                   <CodeBlock
                     language="Python"
                     code={`composite_score = (
-  fundamentals_score * 0.40 +
-  momentum_score * 0.30 +
-  quality_score * 0.20 +
-  sentiment_score * 0.10
+  fundamentals_score * 0.36 +
+  momentum_score * 0.27 +
+  quality_score * 0.18 +
+  sentiment_score * 0.09 +
+  institutional_flow_score * 0.10
 )
 
 composite_confidence = (
-  fundamentals_confidence * 0.40 +
-  momentum_confidence * 0.30 +
-  quality_confidence * 0.20 +
-  sentiment_confidence * 0.10
+  fundamentals_confidence * 0.36 +
+  momentum_confidence * 0.27 +
+  quality_confidence * 0.18 +
+  sentiment_confidence * 0.09 +
+  institutional_flow_confidence * 0.10
 )`}
                   />
                 </div>
@@ -560,43 +605,49 @@ composite_confidence = (
                         <th className="px-4 py-2 text-center text-blue-400">Momentum</th>
                         <th className="px-4 py-2 text-center text-emerald-400">Quality</th>
                         <th className="px-4 py-2 text-center text-yellow-400">Sentiment</th>
+                        <th className="px-4 py-2 text-center text-pink-400">Inst Flow</th>
                       </tr>
                     </thead>
                     <tbody className="text-gray-300">
                       <tr className="border-b border-gray-800 bg-green-950/20">
                         <td className="px-4 py-2 font-semibold">Bull + Normal Vol</td>
-                        <td className="px-4 py-2 text-center">40%</td>
-                        <td className="px-4 py-2 text-center">30%</td>
-                        <td className="px-4 py-2 text-center">20%</td>
+                        <td className="px-4 py-2 text-center">36%</td>
+                        <td className="px-4 py-2 text-center">27%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center">9%</td>
                         <td className="px-4 py-2 text-center">10%</td>
                       </tr>
                       <tr className="border-b border-gray-800 bg-blue-950/20">
                         <td className="px-4 py-2 font-semibold">Bull + High Vol</td>
-                        <td className="px-4 py-2 text-center">30%</td>
-                        <td className="px-4 py-2 text-center font-bold">40%</td>
-                        <td className="px-4 py-2 text-center">20%</td>
+                        <td className="px-4 py-2 text-center">27%</td>
+                        <td className="px-4 py-2 text-center font-bold">36%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center">9%</td>
                         <td className="px-4 py-2 text-center">10%</td>
                       </tr>
                       <tr className="border-b border-gray-800 bg-red-950/20">
                         <td className="px-4 py-2 font-semibold">Bear + High Vol</td>
-                        <td className="px-4 py-2 text-center">20%</td>
-                        <td className="px-4 py-2 text-center">20%</td>
-                        <td className="px-4 py-2 text-center font-bold">40%</td>
-                        <td className="px-4 py-2 text-center">20%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center font-bold">36%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center">10%</td>
                       </tr>
                       <tr className="border-b border-gray-800 bg-orange-950/20">
                         <td className="px-4 py-2 font-semibold">Bear + Normal Vol</td>
-                        <td className="px-4 py-2 text-center">30%</td>
-                        <td className="px-4 py-2 text-center">20%</td>
-                        <td className="px-4 py-2 text-center">30%</td>
-                        <td className="px-4 py-2 text-center">20%</td>
+                        <td className="px-4 py-2 text-center">27%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center">27%</td>
+                        <td className="px-4 py-2 text-center">18%</td>
+                        <td className="px-4 py-2 text-center">10%</td>
                       </tr>
                       <tr className="bg-gray-900/30">
                         <td className="px-4 py-2 font-semibold">Sideways (Any Vol)</td>
-                        <td className="px-4 py-2 text-center">35%</td>
-                        <td className="px-4 py-2 text-center">25%</td>
-                        <td className="px-4 py-2 text-center">25%</td>
+                        <td className="px-4 py-2 text-center">31%</td>
+                        <td className="px-4 py-2 text-center">22%</td>
+                        <td className="px-4 py-2 text-center">22%</td>
                         <td className="px-4 py-2 text-center">15%</td>
+                        <td className="px-4 py-2 text-center">10%</td>
                       </tr>
                     </tbody>
                   </table>
@@ -606,7 +657,7 @@ composite_confidence = (
               <TechnicalDeepDive title="Enabling Adaptive Weights">
                 <div className="space-y-3">
                   <p className="text-sm">
-                    By default, the system uses <strong>static weights (40/30/20/10)</strong>. To enable adaptive weights:
+                    By default, the system uses <strong>static weights (36/27/18/9/10)</strong>. To enable adaptive weights:
                   </p>
                   <CodeBlock
                     language="bash"
@@ -643,7 +694,7 @@ ENABLE_ADAPTIVE_WEIGHTS=true`}
               <div className="flex-1">
                 <h2 className="text-2xl font-bold text-foreground mb-2">Backtesting Engine v2.0</h2>
                 <p className="text-muted-foreground">
-                  Historical simulation engine for validating the 4-agent strategy on past market data with comprehensive
+                  Historical simulation engine for validating the 5-agent strategy on past market data with comprehensive
                   risk-adjusted metrics.
                 </p>
               </div>
@@ -677,7 +728,7 @@ ENABLE_ADAPTIVE_WEIGHTS=true`}
                       <strong className="text-blue-300">Live System Weight Alignment</strong>
                     </div>
                     <p className="text-xs text-gray-400">
-                      Always uses production weights (40/30/20/10) - removed backtest_mode override
+                      Always uses production weights (36/27/18/9/10) - removed backtest_mode override
                     </p>
                   </div>
                   <div className="bg-yellow-950/20 border border-yellow-500/30 rounded-lg p-4">
@@ -804,7 +855,7 @@ print(f"Estimated Bias: {result.estimated_bias_impact}")`}
                       <div className="flex-1">
                         <code className="text-sm text-blue-300">/analyze</code>
                         <p className="text-xs text-gray-400 mt-1">
-                          Complete 4-agent analysis with narrative for single stock
+                          Complete 5-agent analysis with narrative for single stock
                         </p>
                       </div>
                     </div>

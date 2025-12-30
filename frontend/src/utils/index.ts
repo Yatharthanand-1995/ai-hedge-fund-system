@@ -75,6 +75,7 @@ export function getAgentColor(agent: AgentType): string {
     momentum: '#10b981', // emerald-500
     quality: '#8b5cf6', // violet-500
     sentiment: '#f59e0b', // amber-500
+    institutional_flow: '#ec4899', // pink-500
   };
   return colors[agent];
 }
@@ -82,17 +83,18 @@ export function getAgentColor(agent: AgentType): string {
 // Get agent weight
 export function getAgentWeight(agent: AgentType): number {
   const weights: Record<AgentType, number> = {
-    fundamentals: 0.4, // 40%
-    momentum: 0.3, // 30%
-    quality: 0.2, // 20%
-    sentiment: 0.1, // 10%
+    fundamentals: 0.36, // 36%
+    momentum: 0.27, // 27%
+    quality: 0.18, // 18%
+    sentiment: 0.09, // 9%
+    institutional_flow: 0.10, // 10%
   };
   return weights[agent];
 }
 
 // Calculate weighted score
 export function calculateWeightedScore(scores: Record<AgentType, number>): number {
-  const agents: AgentType[] = ['fundamentals', 'momentum', 'quality', 'sentiment'];
+  const agents: AgentType[] = ['fundamentals', 'momentum', 'quality', 'sentiment', 'institutional_flow'];
   return agents.reduce((total, agent) => {
     return total + (scores[agent] * getAgentWeight(agent));
   }, 0);

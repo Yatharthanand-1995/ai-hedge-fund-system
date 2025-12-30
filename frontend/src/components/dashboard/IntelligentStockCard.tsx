@@ -17,6 +17,7 @@ interface AgentScore {
   momentum: number;
   quality: number;
   sentiment: number;
+  institutional_flow: number;
 }
 
 interface ActionItem {
@@ -184,7 +185,7 @@ export const IntelligentStockCard: React.FC<IntelligentStockCardProps> = ({
       {/* Agent Scores Mini Chart */}
       <div className="mb-4">
         <div className="text-sm text-muted-foreground mb-2">Agent Analysis</div>
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           <div className="text-center">
             <div className={cn('text-lg font-bold', getScoreColor(stock.agent_scores.fundamentals))}>
               {stock.agent_scores.fundamentals}
@@ -208,6 +209,12 @@ export const IntelligentStockCard: React.FC<IntelligentStockCardProps> = ({
               {stock.agent_scores.sentiment}
             </div>
             <div className="text-xs text-muted-foreground">Sent</div>
+          </div>
+          <div className="text-center">
+            <div className={cn('text-lg font-bold', getScoreColor(stock.agent_scores.institutional_flow))}>
+              {stock.agent_scores.institutional_flow}
+            </div>
+            <div className="text-xs text-muted-foreground">Inst</div>
           </div>
         </div>
       </div>

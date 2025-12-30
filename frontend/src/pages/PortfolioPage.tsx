@@ -42,7 +42,7 @@ export const PortfolioPage: React.FC = () => {
           📈 Portfolio Manager
         </h1>
         <p className="text-xl text-muted-foreground">
-          Analyze and optimize your investment portfolio with 4-agent intelligence
+          Analyze and optimize your investment portfolio with 5-agent intelligence
         </p>
       </div>
 
@@ -85,7 +85,7 @@ export const PortfolioPage: React.FC = () => {
                     Analyzing Portfolio
                   </h3>
                   <p className="text-muted-foreground">
-                    Our 4-agent system is evaluating your portfolio positions...
+                    Our 5-agent system is evaluating your portfolio positions...
                   </p>
                 </div>
               </div>
@@ -123,7 +123,7 @@ export const PortfolioPage: React.FC = () => {
                   Portfolio Optimization
                 </h3>
                 <p className="text-muted-foreground text-sm">
-                  Get optimal weights for your portfolio based on our 4-agent scoring system and risk assessment
+                  Get optimal weights for your portfolio based on our 5-agent scoring system and risk assessment
                 </p>
               </div>
 

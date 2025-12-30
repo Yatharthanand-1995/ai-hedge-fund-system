@@ -7,13 +7,7 @@ import { StockSummaryCards } from '../components/screener/StockSummaryCards';
 import { StockScreenerTable } from '../components/screener/StockScreenerTable';
 import { MarketRegimePanel } from '../components/dashboard/MarketRegimePanel';
 import { MarketRegimeBadge } from '../components/dashboard/MarketRegimeBadge';
-
-interface AgentScores {
-  fundamentals: number;
-  momentum: number;
-  quality: number;
-  sentiment: number;
-}
+import { type AgentScores } from '../types/api';
 
 interface MarketData {
   current_price: number;
@@ -198,7 +192,7 @@ export const StockAnalysisPage: React.FC = () => {
             <MarketRegimeBadge size="lg" />
           </div>
           <p className="text-xl text-muted-foreground">
-            Real-time analysis of 50 elite stocks powered by 4-agent AI system
+            Real-time analysis of 50 elite stocks powered by 5-agent AI system
           </p>
         </div>
 
@@ -222,7 +216,7 @@ export const StockAnalysisPage: React.FC = () => {
                 Loading Stock Data...
               </h3>
               <p className="text-muted-foreground">
-                Fetching real-time analysis from our 4-agent system
+                Fetching real-time analysis from our 5-agent system
               </p>
             </div>
           </div>
@@ -286,10 +280,10 @@ export const StockAnalysisPage: React.FC = () => {
           </div>
 
           {/* Agent Info */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="professional-card p-4">
               <div className="text-2xl mb-2">📊</div>
-              <h4 className="font-semibold text-foreground mb-1">Fundamentals (40%)</h4>
+              <h4 className="font-semibold text-foreground mb-1">Fundamentals (36%)</h4>
               <p className="text-sm text-muted-foreground">
                 Financial health, profitability, growth rates, and valuation metrics
               </p>
@@ -297,7 +291,7 @@ export const StockAnalysisPage: React.FC = () => {
 
             <div className="professional-card p-4">
               <div className="text-2xl mb-2">📈</div>
-              <h4 className="font-semibold text-foreground mb-1">Momentum (30%)</h4>
+              <h4 className="font-semibold text-foreground mb-1">Momentum (27%)</h4>
               <p className="text-sm text-muted-foreground">
                 Technical indicators, price trends, and volume patterns
               </p>
@@ -305,7 +299,7 @@ export const StockAnalysisPage: React.FC = () => {
 
             <div className="professional-card p-4">
               <div className="text-2xl mb-2">⭐</div>
-              <h4 className="font-semibold text-foreground mb-1">Quality (20%)</h4>
+              <h4 className="font-semibold text-foreground mb-1">Quality (18%)</h4>
               <p className="text-sm text-muted-foreground">
                 Business quality, competitive advantages, and operational efficiency
               </p>
@@ -313,9 +307,17 @@ export const StockAnalysisPage: React.FC = () => {
 
             <div className="professional-card p-4">
               <div className="text-2xl mb-2">💭</div>
-              <h4 className="font-semibold text-foreground mb-1">Sentiment (10%)</h4>
+              <h4 className="font-semibold text-foreground mb-1">Sentiment (9%)</h4>
               <p className="text-sm text-muted-foreground">
                 Analyst ratings, target prices, and market sentiment
+              </p>
+            </div>
+
+            <div className="professional-card p-4">
+              <div className="text-2xl mb-2">💰</div>
+              <h4 className="font-semibold text-foreground mb-1">Institutional Flow (10%)</h4>
+              <p className="text-sm text-muted-foreground">
+                Smart money detection and institutional buying/selling patterns
               </p>
             </div>
           </div>

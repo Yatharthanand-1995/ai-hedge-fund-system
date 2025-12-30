@@ -5,6 +5,7 @@ export interface AgentScores {
   momentum: number;
   quality: number;
   sentiment: number;
+  institutional_flow: number;
 }
 
 export interface AgentNarratives {
@@ -12,6 +13,7 @@ export interface AgentNarratives {
   momentum: string;
   quality: string;
   sentiment: string;
+  institutional_flow: string;
 }
 
 export interface MarketData {
@@ -48,6 +50,7 @@ export interface StockAnalysis {
     momentum: AgentResult;
     quality: AgentResult;
     sentiment: AgentResult;
+    institutional_flow: AgentResult;
   };
   narrative: Narrative;
   market_data: MarketData;
@@ -80,6 +83,7 @@ export interface HealthStatus {
     momentum: 'healthy' | 'degraded' | 'unhealthy';
     quality: 'healthy' | 'degraded' | 'unhealthy';
     sentiment: 'healthy' | 'degraded' | 'unhealthy';
+    institutional_flow: 'healthy' | 'degraded' | 'unhealthy';
   };
 }
 

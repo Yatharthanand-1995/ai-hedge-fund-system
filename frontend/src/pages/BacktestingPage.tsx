@@ -186,7 +186,7 @@ export const BacktestingPage: React.FC = () => {
             📊 5-Year Historical Backtesting
           </h1>
           <p className="text-xl text-muted-foreground">
-            4-Agent Strategy Performance • $10,000 Initial Capital • Top 20 Stocks • Quarterly Rebalancing
+            5-Agent Strategy Performance • $10,000 Initial Capital • Top 20 Stocks • Quarterly Rebalancing
           </p>
         </div>
         <div className="flex space-x-2">
@@ -270,7 +270,7 @@ export const BacktestingPage: React.FC = () => {
                 </div>
                 <div className="bg-white/40 rounded px-3 py-2">
                   <span className="text-green-700 font-semibold">Strategy:</span>
-                  <div className="text-green-900 font-medium mt-1">4-Agent AI</div>
+                  <div className="text-green-900 font-medium mt-1">5-Agent AI</div>
                 </div>
               </div>
             </div>
@@ -400,7 +400,7 @@ export const BacktestingPage: React.FC = () => {
               <ul className="space-y-2 text-sm text-purple-800">
                 <li className="flex items-start space-x-2">
                   <span className="font-bold">✓</span>
-                  <span>4-Agent AI scoring system</span>
+                  <span>5-Agent AI scoring system</span>
                 </li>
                 <li className="flex items-start space-x-2">
                   <span className="font-bold">✓</span>
@@ -447,7 +447,7 @@ export const BacktestingPage: React.FC = () => {
           <div>
             <h3 className="font-semibold text-blue-900 mb-1">About This Backtest</h3>
             <p className="text-sm text-blue-700">
-              This backtest simulates the 4-agent investment strategy over the past 5 years using real historical market data.
+              This backtest simulates the 5-agent investment strategy over the past 5 years using real historical market data.
               The portfolio holds the top 20 stocks from our 50-stock universe, rebalancing quarterly based on agent scores.
               Results include transaction costs and compare against SPY benchmark. The system uses adaptive market regime
               detection to adjust portfolio size (12-20 stocks) and cash allocation (0-40%) based on market conditions.
@@ -493,7 +493,7 @@ export const BacktestingPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <BarChart3 className="h-4 w-4 animate-pulse" />
-                <span>Calculating 4-agent scores</span>
+                <span>Calculating 5-agent scores</span>
               </div>
               <div className="flex items-center space-x-2">
                 <TrendingUp className="h-4 w-4 animate-pulse" />

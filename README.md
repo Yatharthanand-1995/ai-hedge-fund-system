@@ -4,7 +4,7 @@
 
 ## 🎯 System Overview
 
-This is a sophisticated AI-powered hedge fund analysis system that employs **4 specialized agents** to provide comprehensive investment analysis with human-readable narratives. The system combines quantitative analysis with qualitative reasoning to generate professional investment theses.
+This is a sophisticated AI-powered hedge fund analysis system that employs **5 specialized agents** to provide comprehensive investment analysis with human-readable narratives. The system combines quantitative analysis with qualitative reasoning to generate professional investment theses.
 
 ### 🤖 4-Agent Analysis Framework
 
@@ -61,13 +61,13 @@ python -m api.main
 ## 📊 API Endpoints
 
 ### Investment Analysis
-- `POST /analyze` - Complete 4-agent analysis with narrative
+- `POST /analyze` - Complete 5-agent analysis with narrative
 - `GET /analyze/{symbol}` - Quick analysis for single symbol
 - `POST /analyze/batch` - Batch analysis for multiple stocks
 
 ### Portfolio Management
 - `POST /portfolio/analyze` - Portfolio analysis and optimization
-- `GET /portfolio/top-picks` - Top investment picks based on 4-agent analysis
+- `GET /portfolio/top-picks` - Top investment picks based on 5-agent analysis
 
 ### System Health
 - `GET /health` - System health check and agent status

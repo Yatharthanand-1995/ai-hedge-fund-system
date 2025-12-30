@@ -190,7 +190,7 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                       </li>
                       <li className="flex items-start space-x-2">
                         <BarChart3 className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                        <span>Verify <strong>all 4 agents ≥ 70</strong></span>
+                        <span>Verify <strong>all 5 agents ≥ 70</strong></span>
                       </li>
                     </ul>
                   </div>
@@ -267,9 +267,9 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                   </div>
                 </div>
 
-                {/* 4-Agent System */}
+                {/* 5-Agent System */}
                 <div>
-                  <h3 className="text-lg font-semibold text-foreground mb-4">Understanding the 4-Agent System</h3>
+                  <h3 className="text-lg font-semibold text-foreground mb-4">Understanding the 5-Agent System</h3>
                   <div className="space-y-3">
                     <div className="professional-card p-4 bg-blue-50 border-blue-200">
                       <div className="flex items-center justify-between mb-2">
@@ -277,7 +277,7 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                           <div className="text-2xl">📊</div>
                           <div>
                             <h4 className="font-semibold text-blue-900">Fundamentals Agent</h4>
-                            <p className="text-sm text-blue-600">40% Weight - MOST IMPORTANT</p>
+                            <p className="text-sm text-blue-600">36% Weight - MOST IMPORTANT</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -296,7 +296,7 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                           <div className="text-2xl">📈</div>
                           <div>
                             <h4 className="font-semibold text-green-900">Momentum Agent</h4>
-                            <p className="text-sm text-green-600">30% Weight</p>
+                            <p className="text-sm text-green-600">27% Weight</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -315,7 +315,7 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                           <div className="text-2xl">⭐</div>
                           <div>
                             <h4 className="font-semibold text-purple-900">Quality Agent</h4>
-                            <p className="text-sm text-purple-600">20% Weight</p>
+                            <p className="text-sm text-purple-600">18% Weight</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -333,7 +333,7 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                           <div className="text-2xl">💭</div>
                           <div>
                             <h4 className="font-semibold text-amber-900">Sentiment Agent</h4>
-                            <p className="text-sm text-amber-600">10% Weight - LEAST IMPORTANT</p>
+                            <p className="text-sm text-amber-600">9% Weight</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -342,6 +342,24 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                       </div>
                       <p className="text-sm text-amber-800">
                         Analyzes analyst ratings, target prices, and market sentiment. Useful but shouldn't drive decisions alone.
+                      </p>
+                    </div>
+
+                    <div className="professional-card p-4 bg-pink-50 border-pink-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <div className="text-2xl">💰</div>
+                          <div>
+                            <h4 className="font-semibold text-pink-900">Institutional Flow Agent</h4>
+                            <p className="text-sm text-pink-600">10% Weight</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-pink-700 font-medium">Follow smart money</div>
+                        </div>
+                      </div>
+                      <p className="text-sm text-pink-800">
+                        Detects institutional buying and selling patterns through volume analysis (OBV, MFI, CMF). Tracks where smart money is flowing.
                       </p>
                     </div>
                   </div>
@@ -483,7 +501,7 @@ export const InvestmentGuidePanel: React.FC<InvestmentGuidePanelProps> = ({ clas
                       </li>
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span><strong>At least 3 of 4 agents ≥ 70</strong> - Consensus signal</span>
+                        <span><strong>At least 3 of 5 agents ≥ 70</strong> - Consensus signal</span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />

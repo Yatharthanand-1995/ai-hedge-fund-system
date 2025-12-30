@@ -184,7 +184,7 @@ export const TopPicksDisplay: React.FC<TopPicksDisplayProps> = ({
         <div className="flex items-center space-x-2 text-sm text-muted-foreground">
           <span>💡</span>
           <span>
-            Rankings based on our 4-agent analysis framework: 40% fundamentals, 30% momentum, 20% quality, 10% sentiment
+            Rankings based on our 5-agent analysis framework: 36% fundamentals, 27% momentum, 18% quality, 9% sentiment, 10% institutional flow
           </span>
         </div>
       </div>

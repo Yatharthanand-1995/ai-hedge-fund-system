@@ -60,8 +60,8 @@ export const StockAnalysisDisplay: React.FC<StockAnalysisDisplayProps> = ({
 
       {/* Agent Scores */}
       <div>
-        <h2 className="section-header">4-Agent Analysis Breakdown</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <h2 className="section-header">5-Agent Analysis Breakdown</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <AgentScoreCard
             agent="fundamentals"
             score={agent_results.fundamentals.score}
@@ -85,6 +85,12 @@ export const StockAnalysisDisplay: React.FC<StockAnalysisDisplayProps> = ({
             score={agent_results.sentiment.score}
             confidence={agent_results.sentiment.confidence}
             reasoning={agent_results.sentiment.reasoning}
+          />
+          <AgentScoreCard
+            agent="institutional_flow"
+            score={agent_results.institutional_flow.score}
+            confidence={agent_results.institutional_flow.confidence}
+            reasoning={agent_results.institutional_flow.reasoning}
           />
         </div>
       </div>

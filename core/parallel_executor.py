@@ -1,6 +1,6 @@
 """
 Parallel Agent Executor with Error Handling and Retry Logic
-Executes all 4 agents concurrently with graceful degradation
+Executes all 5 agents concurrently with graceful degradation
 """
 
 import asyncio
@@ -19,6 +19,11 @@ import time
 logger = logging.getLogger(__name__)
 
 
+class DataValidationError(Exception):
+    """Raised when comprehensive_data is missing required fields"""
+    pass
+
+
 class AgentExecutionError(Exception):
     """Custom exception for agent execution failures"""
     def __init__(self, agent_name: str, error: Exception):
@@ -32,7 +37,7 @@ class ParallelAgentExecutor:
     Executes agents in parallel with error handling and retry logic
 
     Features:
-    - Concurrent agent execution (4x faster)
+    - Concurrent agent execution (5x faster)
     - Automatic retry with exponential backoff
     - Graceful degradation (continues if some agents fail)
     - Detailed error tracking and logging
@@ -45,6 +50,7 @@ class ParallelAgentExecutor:
         momentum_agent,
         quality_agent,
         sentiment_agent,
+        institutional_flow_agent,
         max_retries: int = 3,
         timeout_seconds: int = 30
     ):
@@ -52,13 +58,53 @@ class ParallelAgentExecutor:
         self.momentum_agent = momentum_agent
         self.quality_agent = quality_agent
         self.sentiment_agent = sentiment_agent
+        self.institutional_flow_agent = institutional_flow_agent
         self.max_retries = max_retries
         self.timeout_seconds = timeout_seconds
 
         logger.info(
-            f"ParallelAgentExecutor initialized (max_retries={max_retries}, "
+            f"ParallelAgentExecutor initialized with 5 agents (max_retries={max_retries}, "
             f"timeout={timeout_seconds}s)"
         )
+
+    def _validate_comprehensive_data(self, symbol: str, data: Dict) -> None:
+        """
+        Validate that comprehensive_data contains all required fields
+
+        Args:
+            symbol: Stock symbol being analyzed
+            data: Comprehensive data from provider
+
+        Raises:
+            DataValidationError: If required fields are missing
+        """
+        required_fields = {
+            'historical_data': 'Price and volume history (DataFrame)',
+            'technical_data': 'Technical indicators (Dict)',
+            'info': 'Company information (Dict)'
+        }
+
+        missing_fields = []
+        invalid_fields = []
+
+        for field, description in required_fields.items():
+            if field not in data:
+                missing_fields.append(f"{field} ({description})")
+            elif data[field] is None:
+                invalid_fields.append(f"{field} is None")
+            elif field == 'historical_data' and len(data[field]) == 0:
+                invalid_fields.append(f"{field} is empty")
+
+        error_messages = []
+        if missing_fields:
+            error_messages.append(f"Missing fields: {', '.join(missing_fields)}")
+        if invalid_fields:
+            error_messages.append(f"Invalid fields: {', '.join(invalid_fields)}")
+
+        if error_messages:
+            error_msg = f"Data validation failed for {symbol}: {'; '.join(error_messages)}"
+            logger.error(error_msg)
+            raise DataValidationError(error_msg)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -136,7 +182,7 @@ class ParallelAgentExecutor:
         comprehensive_data: Dict[str, Any]
     ) -> Dict[str, Dict[str, Any]]:
         """
-        Execute all 4 agents in parallel with error handling
+        Execute all 5 agents in parallel with error handling
 
         Args:
             symbol: Stock ticker symbol
@@ -148,7 +194,22 @@ class ParallelAgentExecutor:
         start_time = time.time()
         logger.info(f"🚀 Starting parallel execution for {symbol}")
 
-        # Create tasks for all agents
+        # Validate comprehensive_data before proceeding
+        try:
+            self._validate_comprehensive_data(symbol, comprehensive_data)
+            logger.info(f"✅ Data validation passed for {symbol}")
+        except DataValidationError as e:
+            logger.error(f"Data validation failed: {e}")
+            # Return fallback results for all agents if data is invalid
+            return {
+                'fundamentals': self._create_fallback_result('Fundamentals', e),
+                'momentum': self._create_fallback_result('Momentum', e),
+                'quality': self._create_fallback_result('Quality', e),
+                'sentiment': self._create_fallback_result('Sentiment', e),
+                'institutional_flow': self._create_fallback_result('InstitutionalFlow', e)
+            }
+
+        # Create tasks for all 5 agents
         tasks = {
             'fundamentals': self._execute_agent_with_retry(
                 self.fundamentals_agent.analyze,
@@ -170,6 +231,15 @@ class ParallelAgentExecutor:
             'sentiment': self._execute_agent_with_retry(
                 self.sentiment_agent.analyze,
                 'Sentiment',
+                symbol
+            ),
+            'institutional_flow': self._execute_agent_with_retry(
+                lambda s: self.institutional_flow_agent.analyze(
+                    s,
+                    comprehensive_data['historical_data'],
+                    cached_data=comprehensive_data
+                ),
+                'InstitutionalFlow',
                 symbol
             )
         }
@@ -196,7 +266,7 @@ class ParallelAgentExecutor:
         success_count = len(agent_results) - len(failed_agents)
         logger.info(
             f"✨ Parallel execution completed in {execution_time:.2f}s "
-            f"({success_count}/4 agents succeeded)"
+            f"({success_count}/5 agents succeeded)"
         )
 
         if failed_agents:
@@ -207,7 +277,7 @@ class ParallelAgentExecutor:
             'execution_time': execution_time,
             'failed_agents': failed_agents,
             'success_count': success_count,
-            'total_agents': 4,
+            'total_agents': 5,
             'timestamp': datetime.now().isoformat()
         }
 
@@ -289,6 +359,7 @@ class ParallelAgentExecutor:
             'momentum': 'unknown',
             'quality': 'unknown',
             'sentiment': 'unknown',
+            'institutional_flow': 'unknown',
             'overall': 'unknown'
         }
 
@@ -330,6 +401,7 @@ class ParallelAgentExecutor:
             check_agent(lambda s: self.momentum_agent.analyze(s, None, None), 'momentum'),
             check_agent(lambda s: self.quality_agent.analyze(s, {}), 'quality'),
             check_agent(self.sentiment_agent.analyze, 'sentiment'),
+            check_agent(lambda s: self.institutional_flow_agent.analyze(s, None, {}), 'institutional_flow'),
             return_exceptions=True
         )
 
@@ -338,9 +410,10 @@ class ParallelAgentExecutor:
             'momentum': results[1] if not isinstance(results[1], Exception) else 'unhealthy',
             'quality': results[2] if not isinstance(results[2], Exception) else 'unhealthy',
             'sentiment': results[3] if not isinstance(results[3], Exception) else 'unhealthy',
+            'institutional_flow': results[4] if not isinstance(results[4], Exception) else 'unhealthy',
         }
 
         healthy_count = sum(1 for status in health.values() if status == 'healthy')
-        health['overall'] = 'healthy' if healthy_count >= 3 else 'degraded' if healthy_count >= 2 else 'unhealthy'
+        health['overall'] = 'healthy' if healthy_count >= 4 else 'degraded' if healthy_count >= 3 else 'unhealthy'
 
         return health

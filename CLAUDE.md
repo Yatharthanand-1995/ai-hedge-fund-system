@@ -132,7 +132,7 @@ cd frontend && npm run lint
 The system exposes a FastAPI server on port 8010:
 
 ### Core Analysis
-- **POST /analyze** - Complete 4-agent analysis with narrative for single stock
+- **POST /analyze** - Complete 5-agent analysis with narrative for single stock
 - **GET /analyze/{symbol}** - Quick analysis with cached results
 - **POST /analyze/batch** - Batch analysis (max 50 symbols, processed in batches of 10)
 
@@ -306,7 +306,7 @@ Agent weights are defined in multiple locations and must be updated consistently
 
 ## Backtesting Engine V2.0
 
-The system includes a sophisticated historical backtesting engine in `core/backtesting_engine.py` for validating the 4-agent strategy on historical data.
+The system includes a sophisticated historical backtesting engine in `core/backtesting_engine.py` for validating the 5-agent strategy on historical data.
 
 ### Key Features (V2.0)
 

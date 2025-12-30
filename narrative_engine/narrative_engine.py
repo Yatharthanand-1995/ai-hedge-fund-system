@@ -83,7 +83,7 @@ class InvestmentNarrativeEngine:
             # Gemini setup
             if GEMINI_AVAILABLE and os.getenv('GEMINI_API_KEY'):
                 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-                self.gemini_client = genai.GenerativeModel('gemini-2.0-flash')
+                self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
                 logger.info("Gemini client initialized")
 
         except Exception as e:
@@ -99,18 +99,20 @@ class InvestmentNarrativeEngine:
                 logger.warning(f"Failed to get adaptive weights, using static: {e}")
                 # Fallback to static weights
                 return {
-                    'fundamentals': 0.4,
-                    'momentum': 0.3,
-                    'quality': 0.2,
-                    'sentiment': 0.1
+                    'fundamentals': 0.36,
+                'momentum': 0.27,
+                'quality': 0.18,
+                'sentiment': 0.09,
+                'institutional_flow': 0.10
                 }
         else:
             # Static weights (default)
             return {
-                'fundamentals': 0.4,
-                'momentum': 0.3,
-                'quality': 0.2,
-                'sentiment': 0.1
+                'fundamentals': 0.36,
+                'momentum': 0.27,
+                'quality': 0.18,
+                'sentiment': 0.09,
+                'institutional_flow': 0.10
             }
 
     def generate_comprehensive_thesis(self, symbol: str, agent_results: Dict,
@@ -142,6 +144,7 @@ class InvestmentNarrativeEngine:
             momentum = agent_results.get('momentum', {})
             quality = agent_results.get('quality', {})
             sentiment = agent_results.get('sentiment', {})
+            institutional_flow = agent_results.get('institutional_flow', {})
 
             # Get adaptive or static weights
             weights = self._get_current_weights()
@@ -151,7 +154,8 @@ class InvestmentNarrativeEngine:
                 fundamentals.get('score', 0) * weights['fundamentals'] +
                 momentum.get('score', 0) * weights['momentum'] +
                 quality.get('score', 0) * weights['quality'] +
-                sentiment.get('score', 0) * weights['sentiment']
+                sentiment.get('score', 0) * weights['sentiment'] +
+                institutional_flow.get('score', 0) * weights.get('institutional_flow', 0.10)
             )
 
             # Generate individual agent narratives (rule-based backup)
@@ -211,7 +215,8 @@ class InvestmentNarrativeEngine:
                     'fundamentals': fundamentals.get('score', 0),
                     'momentum': momentum.get('score', 0),
                     'quality': quality.get('score', 0),
-                    'sentiment': sentiment.get('score', 0)
+                    'sentiment': sentiment.get('score', 0),
+                    'institutional_flow': institutional_flow.get('score', 0)
                 },
                 'weights_used': weights
             }
@@ -277,17 +282,19 @@ class InvestmentNarrativeEngine:
         momentum = agent_results.get('momentum', {})
         quality = agent_results.get('quality', {})
         sentiment = agent_results.get('sentiment', {})
+        institutional_flow = agent_results.get('institutional_flow', {})
 
         data_summary = {
             'symbol': symbol,
             'company_name': company_name,
             'overall_score': overall_score,
             'agent_scores': {
-                'fundamentals': fundamentals.get('score', 0),
-                'momentum': momentum.get('score', 0),
-                'quality': quality.get('score', 0),
-                'sentiment': sentiment.get('score', 0)
-            },
+                    'fundamentals': fundamentals.get('score', 0),
+                    'momentum': momentum.get('score', 0),
+                    'quality': quality.get('score', 0),
+                    'sentiment': sentiment.get('score', 0),
+                    'institutional_flow': institutional_flow.get('score', 0)
+                },
             'fundamentals_metrics': fundamentals.get('metrics', {}),
             'momentum_metrics': momentum.get('metrics', {}),
             'quality_metrics': quality.get('metrics', {}),
