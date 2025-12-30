@@ -1,5 +1,6 @@
 import React, { Component, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { errorReportingService } from '../../services/errorReporting';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -19,6 +20,12 @@ interface ErrorBoundaryState {
  *
  * Catches JavaScript errors anywhere in the child component tree,
  * logs those errors, and displays a fallback UI instead of crashing.
+ *
+ * Features:
+ * - Isolated error containment (errors don't crash entire app)
+ * - Professional error UI with recovery options
+ * - Automatic error reporting and logging
+ * - Development-mode error details
  *
  * Usage:
  * <ErrorBoundary componentName="Dashboard Panel">
@@ -49,8 +56,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       errorInfo
     });
 
-    // You can also log the error to an error reporting service here
-    // Example: logErrorToService(error, errorInfo);
+    // Report error to centralized error reporting service
+    errorReportingService.logError(error, errorInfo, this.props.componentName);
   }
 
   handleReset = (): void => {

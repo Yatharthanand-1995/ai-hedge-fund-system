@@ -1,9 +1,9 @@
-import React, { useState, Component } from 'react';
-import type { ErrorInfo, ReactNode } from 'react';
+import React, { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Navigation } from './components/navigation/Navigation';
 import { ToastProvider } from './components/common/Toast';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { StockAnalysisPage } from './pages/StockAnalysisPage';
 import { PortfolioPage } from './pages/PortfolioPage';
 import { BacktestingPage } from './pages/BacktestingPage';
@@ -23,56 +23,6 @@ import type { FilterOptions, SortOption } from './types/filters';
 import { FEATURE_FLAGS } from './config/featureFlags';
 
 console.log('🚀 App.tsx loaded successfully');
-
-// Error Boundary Component
-interface ErrorBoundaryProps {
-  children: ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    console.error('❌ Error Boundary caught error:', error);
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('❌ Error details:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: '40px', backgroundColor: '#1a1a1a', color: '#fff', minHeight: '100vh' }}>
-          <h1>⚠️ Application Error</h1>
-          <p>Something went wrong. Please check the console for details.</p>
-          <pre style={{ backgroundColor: '#2a2a2a', padding: '20px', borderRadius: '8px', overflow: 'auto' }}>
-            {this.state.error?.toString()}
-            {'\n\n'}
-            {this.state.error?.stack}
-          </pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{ marginTop: '20px', padding: '10px 20px', cursor: 'pointer' }}
-          >
-            Reload Page
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
 
 // Create a client
 const queryClient = new QueryClient({
@@ -266,38 +216,52 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 
       {/* Command Center - Action Items (NEW) */}
       {FEATURE_FLAGS.USE_COMMAND_CENTER && (
-        <CommandCenter
-          className="mb-8"
-          onPageChange={onPageChange}
-          currentPage="dashboard"
-        />
+        <ErrorBoundary componentName="Command Center">
+          <CommandCenter
+            className="mb-8"
+            onPageChange={onPageChange}
+            currentPage="dashboard"
+          />
+        </ErrorBoundary>
       )}
 
       {/* Investment Guide - How to Use */}
-      <InvestmentGuidePanel className="mb-8" />
+      <ErrorBoundary componentName="Investment Guide Panel">
+        <InvestmentGuidePanel className="mb-8" />
+      </ErrorBoundary>
 
       {/* Your Real Portfolio with AI Recommendations */}
-      <UserPortfolioPanel className="mb-8" />
+      <ErrorBoundary componentName="User Portfolio Panel">
+        <UserPortfolioPanel className="mb-8" />
+      </ErrorBoundary>
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Left Column - Insights and Actions */}
         <div className="xl:col-span-1 space-y-8">
-          <ActionableInsightsPanel />
+          <ErrorBoundary componentName="Actionable Insights Panel">
+            <ActionableInsightsPanel />
+          </ErrorBoundary>
         </div>
 
         {/* Right Column - Analysis */}
         <div className="xl:col-span-2 space-y-8">
           {/* Multi-Agent Analysis */}
-          <MultiAgentConsensusPanel />
+          <ErrorBoundary componentName="Multi-Agent Consensus Panel">
+            <MultiAgentConsensusPanel />
+          </ErrorBoundary>
 
           {/* Sector Allocation */}
-          <SectorAllocationPanel />
+          <ErrorBoundary componentName="Sector Allocation Panel">
+            <SectorAllocationPanel />
+          </ErrorBoundary>
         </div>
       </div>
 
       {/* Risk Management Section */}
-      <RiskManagementPanel className="mb-8" />
+      <ErrorBoundary componentName="Risk Management Panel">
+        <RiskManagementPanel className="mb-8" />
+      </ErrorBoundary>
 
       {/* Intelligent Stock Recommendations */}
       <div className="mb-8">
@@ -408,44 +372,46 @@ function App() {
   console.log('📄 Current page:', currentPage);
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary componentName="Application Root">
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <div className="min-h-screen bg-background flex justify-center">
             <div className="w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6">
-              <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+              <ErrorBoundary componentName="Navigation">
+                <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+              </ErrorBoundary>
               {currentPage === 'dashboard' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="Dashboard Page">
                   <Dashboard onPageChange={setCurrentPage} />
                 </ErrorBoundary>
               )}
               {currentPage === 'analysis' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="Stock Analysis Page">
                   <StockAnalysisPage />
                 </ErrorBoundary>
               )}
               {currentPage === 'portfolio' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="Portfolio Page">
                   <PortfolioPage />
                 </ErrorBoundary>
               )}
               {currentPage === 'backtesting' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="Backtesting Page">
                   <BacktestingPage />
                 </ErrorBoundary>
               )}
               {currentPage === 'paper-trading' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="Paper Trading Page">
                   <PaperTradingPage />
                 </ErrorBoundary>
               )}
               {currentPage === 'system-details' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="System Details Page">
                   <SystemDetailsPage />
                 </ErrorBoundary>
               )}
               {currentPage === 'alerts' && (
-                <ErrorBoundary>
+                <ErrorBoundary componentName="Alerts Page">
                   <AlertsPage />
                 </ErrorBoundary>
               )}
