@@ -100,7 +100,8 @@ class NumpyEncoder(json.JSONEncoder):
                     return bool(obj)
                 else:
                     return str(obj)
-            except:
+            except (TypeError, ValueError, AttributeError) as e:
+                # Fallback to string representation if dtype conversion fails
                 return str(obj)
         return super().default(obj)
 
@@ -150,10 +151,9 @@ logger = logging.getLogger(__name__)
 CACHE_MAX_SIZE = int(os.getenv('CACHE_MAX_SIZE', '2000'))  # Increased from 1000 to 2000
 CACHE_TTL_SECONDS = int(os.getenv('CACHE_TTL_SECONDS', '1200'))  # 20 minutes default
 analysis_cache = TTLCache(maxsize=CACHE_MAX_SIZE, ttl=CACHE_TTL_SECONDS)
-cache_lock = asyncio.Lock()  # Lock for thread-safe cache access
-
-# Thread pool for concurrent processing
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
+# Async lock for cache access (correct for FastAPI async endpoints)
+# All cache access happens via async functions, so asyncio.Lock is appropriate
+cache_lock = asyncio.Lock()
 
 # Initialize rate limiter (if available)
 if RATE_LIMITING_ENABLED:
@@ -447,6 +447,29 @@ class HealthResponse(BaseModel):
     version: str
     agents_status: Dict[str, str]
     environment: Optional[Dict] = None
+
+class PaperTradeRequest(BaseModel):
+    """Request model for paper trading operations with validation."""
+    symbol: str
+    shares: int
+
+    @validator('symbol')
+    def validate_symbol(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Symbol cannot be empty')
+        if not v.replace('.', '').replace('-', '').isalnum():
+            raise ValueError('Symbol must contain only alphanumeric characters, dots, and hyphens')
+        if len(v) > 10:
+            raise ValueError('Symbol too long (max 10 characters)')
+        return v.upper().strip()
+
+    @validator('shares')
+    def validate_shares(cls, v):
+        if v <= 0:
+            raise ValueError('Shares must be positive')
+        if v > 100000:
+            raise ValueError('Shares cannot exceed 100,000')
+        return v
 
 # API Routes
 @app.get("/", response_class=HTMLResponse)
@@ -845,9 +868,18 @@ async def analyze_stock(request: AnalysisRequest, req: Request = None):
 
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.error(f"❌ Invalid input for {symbol}: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+    except ConnectionError as e:
+        logger.error(f"❌ Connection error analyzing {symbol}: {e}")
+        raise HTTPException(status_code=503, detail="Unable to fetch market data. Please try again later.")
     except Exception as e:
         logger.error(f"❌ Analysis failed for {symbol}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed for {symbol}. Our team has been notified."
+        )
 
 @app.get("/analyze/consensus", tags=["Investment Analysis"])
 async def get_agent_consensus(symbols: str = "AAPL,MSFT,GOOGL"):
@@ -1025,9 +1057,15 @@ async def batch_analyze(request: BatchAnalysisRequest, req: Request = None):
             "timestamp": datetime.now().isoformat()
         }
 
+    except ValueError as e:
+        logger.error(f"Batch analysis - invalid input: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
     except Exception as e:
-        logger.error(f"Batch analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Batch analysis failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Batch analysis failed. Please try again or contact support."
+        )
 
 @app.post("/portfolio/analyze", tags=["Portfolio Management"])
 async def analyze_portfolio(request: PortfolioRequest):
@@ -2144,16 +2182,20 @@ from core.paper_portfolio_manager import PaperPortfolioManager
 paper_portfolio = PaperPortfolioManager()
 
 @app.post("/portfolio/paper/buy", tags=["Paper Trading"])
-async def paper_buy(symbol: str, shares: int):
+async def paper_buy(request: PaperTradeRequest):
     """
-    Execute a paper trade buy order.
+    Execute a paper trade buy order with validated input.
 
-    - **symbol**: Stock symbol (e.g., AAPL)
-    - **shares**: Number of shares to buy
+    - **symbol**: Stock symbol (e.g., AAPL) - validated and normalized
+    - **shares**: Number of shares to buy (1-100,000)
 
     Returns transaction details and updated portfolio state.
     """
     try:
+        # Extract validated parameters
+        symbol = request.symbol  # Already validated and uppercased
+        shares = request.shares  # Already validated
+
         # Get current price
         provider = EnhancedYahooProvider()
         price_data = provider.get_comprehensive_data(symbol)
@@ -2186,16 +2228,20 @@ async def paper_buy(symbol: str, shares: int):
 
 
 @app.post("/portfolio/paper/sell", tags=["Paper Trading"])
-async def paper_sell(symbol: str, shares: int):
+async def paper_sell(request: PaperTradeRequest):
     """
-    Execute a paper trade sell order.
+    Execute a paper trade sell order with validated input.
 
-    - **symbol**: Stock symbol (e.g., AAPL)
-    - **shares**: Number of shares to sell
+    - **symbol**: Stock symbol (e.g., AAPL) - validated and normalized
+    - **shares**: Number of shares to sell (1-100,000)
 
     Returns transaction details including P&L and updated portfolio state.
     """
     try:
+        # Extract validated parameters
+        symbol = request.symbol  # Already validated and uppercased
+        shares = request.shares  # Already validated
+
         # Get current price
         provider = EnhancedYahooProvider()
         price_data = provider.get_comprehensive_data(symbol)
@@ -2624,8 +2670,9 @@ async def scan_portfolio_for_auto_sell():
                 # Analyze stock to get current recommendation
                 analysis_result = await analyze_single_stock(symbol)
                 ai_recommendations[symbol] = analysis_result.get('recommendation', 'HOLD')
-            except:
-                # If analysis fails, default to HOLD
+            except Exception as e:
+                # If analysis fails, default to HOLD and log the error
+                logger.warning(f"Failed to analyze {symbol} for auto-sell: {str(e)}")
                 ai_recommendations[symbol] = 'HOLD'
 
         # Scan portfolio
@@ -2664,7 +2711,8 @@ async def execute_auto_sells():
             try:
                 analysis_result = await analyze_single_stock(symbol)
                 ai_recommendations[symbol] = analysis_result.get('recommendation', 'HOLD')
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to analyze {symbol} for auto-sell execution: {str(e)}")
                 ai_recommendations[symbol] = 'HOLD'
 
         # Scan portfolio
@@ -2764,7 +2812,8 @@ async def execute_automated_trading(universe_limit: int = 50):
                 try:
                     analysis_result = await analyze_single_stock(symbol)
                     ai_recommendations[symbol] = analysis_result.get('recommendation', 'HOLD')
-                except:
+                except Exception as e:
+                    logger.warning(f"Failed to analyze {symbol} in auto-trade cycle: {str(e)}")
                     ai_recommendations[symbol] = 'HOLD'
 
             # Scan and execute sells
@@ -2865,9 +2914,18 @@ async def execute_automated_trading(universe_limit: int = 50):
             "timestamp": datetime.now().isoformat()
         }
 
+    except ValueError as e:
+        logger.error(f"Automated trading - invalid configuration: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid configuration: {str(e)}")
+    except ConnectionError as e:
+        logger.error(f"Automated trading - connection error: {e}")
+        raise HTTPException(status_code=503, detail="Unable to fetch market data for automated trading.")
     except Exception as e:
-        logger.error(f"Automated trading error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Automated trading error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Automated trading cycle failed. Check logs for details."
+        )
 
 
 @app.get("/portfolio/paper/auto-trade/status", tags=["Paper Trading - Automation"])
@@ -3170,7 +3228,8 @@ async def record_performance_snapshot():
             regime_service = MarketRegimeService()
             regime_data = regime_service.detect_regime()
             regime = f"{regime_data['trend']}_{regime_data['volatility']}"
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to detect market regime: {str(e)}")
             regime = "UNKNOWN"
 
         # Record snapshot

@@ -1,6 +1,12 @@
 """
 Data Cache for Stock Picker
 Pre-downloads and caches fundamental data to speed up backtesting
+
+SECURITY NOTE: This module uses pickle for caching pandas DataFrames.
+- Pickle is necessary because pandas DataFrames cannot be easily serialized to JSON
+- ONLY load pickle files from trusted cache directory (created by this system)
+- DO NOT load pickle files from untrusted sources
+- Cache files are stored in ./cache/ which should be in .gitignore
 """
 
 import yfinance as yf
@@ -13,6 +19,9 @@ from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Security: Restrict pickle loading to known cache directory
+TRUSTED_CACHE_DIR = os.path.abspath('./cache')
 
 
 class DataCache:
@@ -134,8 +143,18 @@ class DataCache:
         print(f"💾 Cache saved to {filepath} ({size_mb:.1f} MB)")
 
     def load_from_disk(self, filename: str = 'stock_data_cache.pkl') -> bool:
-        """Load cache from disk"""
+        """
+        Load cache from disk
+
+        SECURITY: Only loads from trusted cache directory to prevent pickle exploits
+        """
         filepath = os.path.join(self.cache_dir, filename)
+        abs_filepath = os.path.abspath(filepath)
+
+        # Security check: Ensure file is in trusted cache directory
+        if not abs_filepath.startswith(os.path.abspath(self.cache_dir)):
+            logger.error(f"Security: Attempted to load pickle from untrusted path: {filepath}")
+            raise ValueError(f"Cannot load cache from outside cache directory: {filepath}")
 
         if not os.path.exists(filepath):
             logger.warning(f"Cache file not found: {filepath}")

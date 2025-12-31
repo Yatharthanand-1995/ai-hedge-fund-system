@@ -154,41 +154,55 @@ class MomentumAgent:
     def _score_moving_averages(self, close: np.ndarray) -> float:
         """Score based on price vs moving averages (0-100)"""
         score = 0.0
+
+        # Validate input data
+        if len(close) == 0:
+            return 0.0
+
         current_price = close[-1]
+
+        # Check if current price is valid
+        if np.isnan(current_price) or current_price <= 0:
+            return 0.0
 
         # MA50
         if len(close) >= 50:
             ma50 = np.mean(close[-50:])
-            diff_50 = (current_price / ma50 - 1) * 100
+            # Validate MA50 before division
+            if not np.isnan(ma50) and ma50 > 0:
+                diff_50 = (current_price / ma50 - 1) * 100
 
-            if diff_50 > 10:
-                score += 40
-            elif diff_50 > 5:
-                score += 30
-            elif diff_50 > 0:
-                score += 20
-            elif diff_50 > -5:
-                score += 10
+                if diff_50 > 10:
+                    score += 40
+                elif diff_50 > 5:
+                    score += 30
+                elif diff_50 > 0:
+                    score += 20
+                elif diff_50 > -5:
+                    score += 10
 
         # MA200
         if len(close) >= 200:
             ma200 = np.mean(close[-200:])
-            diff_200 = (current_price / ma200 - 1) * 100
+            # Validate MA200 before division
+            if not np.isnan(ma200) and ma200 > 0:
+                diff_200 = (current_price / ma200 - 1) * 100
 
-            if diff_200 > 15:
-                score += 40
-            elif diff_200 > 10:
-                score += 30
-            elif diff_200 > 5:
-                score += 20
-            elif diff_200 > 0:
-                score += 10
+                if diff_200 > 15:
+                    score += 40
+                elif diff_200 > 10:
+                    score += 30
+                elif diff_200 > 5:
+                    score += 20
+                elif diff_200 > 0:
+                    score += 10
 
         # Golden cross bonus (MA50 > MA200)
         if len(close) >= 200:
             ma50 = np.mean(close[-50:])
             ma200 = np.mean(close[-200:])
-            if ma50 > ma200:
+            # Validate both MAs before comparison
+            if not np.isnan(ma50) and not np.isnan(ma200) and ma50 > ma200:
                 score += 20
 
         return min(score, 100)

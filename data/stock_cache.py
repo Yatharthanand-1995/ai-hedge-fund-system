@@ -1,6 +1,12 @@
 """
 Stock Pick Caching System
 Provides intelligent caching for stock picks and market data to dramatically improve performance
+
+SECURITY NOTE: This module uses pickle for caching historical data (pandas DataFrames).
+- Pickle is necessary because pandas DataFrames cannot be easily serialized to JSON
+- ONLY loads pickle files from trusted cache directory (created by this system)
+- DO NOT load pickle files from untrusted sources
+- Cache files are stored in cache/ directory which should be in .gitignore
 """
 
 import time
@@ -134,7 +140,15 @@ class StockPickCache:
 
         # Check disk cache
         cache_file = self.cache_dir / f"hist_{cache_key}.pkl"
+
+        # Security check: Ensure cache file is in trusted cache directory
         if cache_file.exists():
+            abs_cache_file = cache_file.resolve()
+            abs_cache_dir = self.cache_dir.resolve()
+            if not str(abs_cache_file).startswith(str(abs_cache_dir)):
+                logger.error(f"Security: Attempted to load pickle from untrusted path: {cache_file}")
+                raise ValueError(f"Cannot load cache from outside cache directory: {cache_file}")
+
             try:
                 with open(cache_file, 'rb') as f:
                     entry = pickle.load(f)
@@ -148,7 +162,8 @@ class StockPickCache:
                         cache_file.unlink()  # Remove expired cache file
             except Exception as e:
                 logger.warning(f"Failed to load cached historical data for {symbol}: {e}")
-                cache_file.unlink()
+                if cache_file.exists():
+                    cache_file.unlink()
 
         logger.debug(f"Cache MISS for historical_data ({symbol})")
         return None

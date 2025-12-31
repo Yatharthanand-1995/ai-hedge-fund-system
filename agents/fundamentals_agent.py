@@ -273,7 +273,7 @@ class FundamentalsAgent:
         # Book Value Growth (if available)
         if not financials.empty and 'Total Stockholder Equity' in financials.index:
             equity_values = financials.loc['Total Stockholder Equity'].values
-            if len(equity_values) >= 2:
+            if len(equity_values) >= 2 and equity_values[1] != 0:
                 equity_growth = (equity_values[0] - equity_values[1]) / equity_values[1] * 100
                 if equity_growth > 15:
                     score += 20

@@ -150,19 +150,24 @@ class QualityAgent:
             revenues = financials.loc['Total Revenue'].values
             if len(revenues) >= 3:
                 # Check if revenues are growing consistently (not volatile)
-                revenue_changes = np.diff(revenues) / revenues[1:]
-                volatility = np.std(revenue_changes)
+                # Validate data before calculation to prevent division by zero and NaN issues
+                if not np.any(np.isnan(revenues)) and not np.any(revenues[1:] == 0):
+                    revenue_changes = np.diff(revenues) / revenues[1:]
 
-                if volatility < 0.1:  # Low volatility
-                    score += 40
-                elif volatility < 0.2:
-                    score += 30
-                elif volatility < 0.3:
-                    score += 20
+                    # Check if revenue_changes contains valid data
+                    if not np.any(np.isnan(revenue_changes)) and len(revenue_changes) > 0:
+                        volatility = np.std(revenue_changes)
 
-                # All positive growth
-                if all(change > 0 for change in revenue_changes):
-                    score += 20
+                        if volatility < 0.1:  # Low volatility
+                            score += 40
+                        elif volatility < 0.2:
+                            score += 30
+                        elif volatility < 0.3:
+                            score += 20
+
+                        # All positive growth
+                        if all(change > 0 for change in revenue_changes):
+                            score += 20
 
         # Profit margin stability
         profit_margin = info.get('profitMargins', 0)

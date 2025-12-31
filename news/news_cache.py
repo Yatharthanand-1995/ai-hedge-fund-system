@@ -3,7 +3,7 @@ News Cache
 Caches news articles to reduce API calls and improve performance
 """
 
-import pickle
+import json
 import os
 import pandas as pd
 from typing import Dict, List, Optional, Any
@@ -57,7 +57,7 @@ class NewsCache:
 
     def _get_cache_filepath(self, cache_key: str) -> str:
         """Get file path for cache key"""
-        return os.path.join(self.cache_dir, f"{cache_key}.pkl")
+        return os.path.join(self.cache_dir, f"{cache_key}.json")
 
     def get(self, symbol: str, days: int, source: str = '') -> Optional[List[Dict]]:
         """
@@ -89,8 +89,10 @@ class NewsCache:
             # Check disk cache
             cache_file = self._get_cache_filepath(cache_key)
             if os.path.exists(cache_file):
-                with open(cache_file, 'rb') as f:
-                    cached_data = pickle.load(f)
+                with open(cache_file, 'r') as f:
+                    cached_data = json.load(f)
+                    # Convert timestamp string back to datetime
+                    cached_data['timestamp'] = datetime.fromisoformat(cached_data['timestamp'])
 
                 if self._is_cache_valid(cached_data['timestamp']):
                     # Load into memory cache
@@ -127,7 +129,8 @@ class NewsCache:
             cache_key = self._generate_cache_key(symbol, days, source)
             timestamp = datetime.now()
 
-            cached_data = {
+            # Memory cache data (with datetime object)
+            memory_data = {
                 'symbol': symbol,
                 'days': days,
                 'source': source,
@@ -136,13 +139,23 @@ class NewsCache:
                 'expiry_hours': expiry_hours or self.default_expiry_hours
             }
 
+            # Disk cache data (with ISO string timestamp)
+            disk_data = {
+                'symbol': symbol,
+                'days': days,
+                'source': source,
+                'articles': articles,
+                'timestamp': timestamp.isoformat(),
+                'expiry_hours': expiry_hours or self.default_expiry_hours
+            }
+
             # Save to disk
             cache_file = self._get_cache_filepath(cache_key)
-            with open(cache_file, 'wb') as f:
-                pickle.dump(cached_data, f)
+            with open(cache_file, 'w') as f:
+                json.dump(disk_data, f, indent=2)
 
             # Add to memory cache
-            self._add_to_memory_cache(cache_key, cached_data)
+            self._add_to_memory_cache(cache_key, memory_data)
 
             logger.debug(f"Cached {len(articles)} articles for {symbol}")
             return True
@@ -186,11 +199,13 @@ class NewsCache:
 
             # Clean disk cache
             for filename in os.listdir(self.cache_dir):
-                if filename.endswith('.pkl'):
+                if filename.endswith('.json'):
                     filepath = os.path.join(self.cache_dir, filename)
                     try:
-                        with open(filepath, 'rb') as f:
-                            cached_data = pickle.load(f)
+                        with open(filepath, 'r') as f:
+                            cached_data = json.load(f)
+                            # Convert timestamp string to datetime
+                            cached_data['timestamp'] = datetime.fromisoformat(cached_data['timestamp'])
 
                         if not self._is_cache_valid(cached_data['timestamp'],
                                                    cached_data.get('expiry_hours')):
@@ -233,7 +248,7 @@ class NewsCache:
 
             if os.path.exists(self.cache_dir):
                 for filename in os.listdir(self.cache_dir):
-                    if filename.endswith('.pkl'):
+                    if filename.endswith('.json'):
                         filepath = os.path.join(self.cache_dir, filename)
                         disk_files += 1
                         total_disk_size += os.path.getsize(filepath)
@@ -278,11 +293,11 @@ class NewsCache:
 
                 # Clear disk cache for symbol
                 for filename in os.listdir(self.cache_dir):
-                    if filename.endswith('.pkl'):
+                    if filename.endswith('.json'):
                         filepath = os.path.join(self.cache_dir, filename)
                         try:
-                            with open(filepath, 'rb') as f:
-                                cached_data = pickle.load(f)
+                            with open(filepath, 'r') as f:
+                                cached_data = json.load(f)
 
                             if cached_data.get('symbol') == symbol:
                                 os.remove(filepath)
@@ -297,7 +312,7 @@ class NewsCache:
                 self.memory_access_times.clear()
 
                 for filename in os.listdir(self.cache_dir):
-                    if filename.endswith('.pkl'):
+                    if filename.endswith('.json'):
                         filepath = os.path.join(self.cache_dir, filename)
                         os.remove(filepath)
                         removed_count += 1

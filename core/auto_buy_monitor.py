@@ -11,12 +11,16 @@ Monitors market opportunities and automatically buys based on:
 import json
 import logging
 import requests
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+# Global lock to prevent concurrent auto-buy operations
+_auto_buy_lock = threading.RLock()
 
 
 @dataclass
@@ -471,6 +475,8 @@ class AutoBuyMonitor:
         """
         Scan multiple stock analyses for auto-buy opportunities.
 
+        THREAD-SAFE: Uses lock to prevent concurrent execution and race conditions.
+
         Args:
             analyses: List of stock analysis results
             portfolio_cash: Available cash
@@ -483,77 +489,79 @@ class AutoBuyMonitor:
         Returns:
             List of stocks that should be auto-bought
         """
-        if not self.rules.enabled:
-            return []
+        # Acquire lock to prevent concurrent auto-buy operations (prevents race conditions)
+        with _auto_buy_lock:
+            if not self.rules.enabled:
+                return []
 
-        # Calculate sector allocation
-        sector_allocation = {}
-        if sector_mapping and portfolio_positions:
-            sector_allocation = self._get_sector_allocation(
-                {'positions': portfolio_positions},
-                sector_mapping
-            )
+            # Calculate sector allocation
+            sector_allocation = {}
+            if sector_mapping and portfolio_positions:
+                sector_allocation = self._get_sector_allocation(
+                    {'positions': portfolio_positions},
+                    sector_mapping
+                )
 
-        opportunities = []
+            opportunities = []
 
-        for analysis in analyses:
-            symbol = analysis.get('symbol')
-            narrative = analysis.get('narrative', {})
-            market_data = analysis.get('market_data', {})
+            for analysis in analyses:
+                symbol = analysis.get('symbol')
+                narrative = analysis.get('narrative', {})
+                market_data = analysis.get('market_data', {})
 
-            overall_score = narrative.get('overall_score', 0)
-            recommendation = narrative.get('recommendation', 'HOLD')
-            confidence_level = narrative.get('confidence_level', 'LOW')
-            current_price = market_data.get('current_price', 0)
+                overall_score = narrative.get('overall_score', 0)
+                recommendation = narrative.get('recommendation', 'HOLD')
+                confidence_level = narrative.get('confidence_level', 'LOW')
+                current_price = market_data.get('current_price', 0)
 
-            # Find sector
-            sector = None
-            if sector_mapping:
-                for sector_name, symbols in sector_mapping.items():
-                    if symbol in symbols:
-                        sector = sector_name
-                        break
+                # Find sector
+                sector = None
+                if sector_mapping:
+                    for sector_name, symbols in sector_mapping.items():
+                        if symbol in symbols:
+                            sector = sector_name
+                            break
 
-            # Check if should buy
-            result = self.check_opportunity(
-                symbol=symbol,
-                overall_score=overall_score,
-                recommendation=recommendation,
-                confidence_level=confidence_level,
-                current_price=current_price,
-                portfolio_cash=portfolio_cash,
-                portfolio_total_value=portfolio_total_value,
-                num_positions=num_positions,
-                sector=sector,
-                sector_allocation=sector_allocation,
-                already_owned=symbol in owned_symbols
-            )
+                # Check if should buy
+                result = self.check_opportunity(
+                    symbol=symbol,
+                    overall_score=overall_score,
+                    recommendation=recommendation,
+                    confidence_level=confidence_level,
+                    current_price=current_price,
+                    portfolio_cash=portfolio_cash,
+                    portfolio_total_value=portfolio_total_value,
+                    num_positions=num_positions,
+                    sector=sector,
+                    sector_allocation=sector_allocation,
+                    already_owned=symbol in owned_symbols
+                )
 
-            if result['should_buy']:
-                opportunities.append({
-                    'symbol': symbol,
-                    'shares': result['shares'],
-                    'price': current_price,
-                    'total_cost': result['total_cost'],
-                    'reason': result['reason'],
-                    'trigger': result['trigger'],
-                    'overall_score': overall_score,
-                    'recommendation': recommendation,
-                    'sector': sector
-                })
+                if result['should_buy']:
+                    opportunities.append({
+                        'symbol': symbol,
+                        'shares': result['shares'],
+                        'price': current_price,
+                        'total_cost': result['total_cost'],
+                        'reason': result['reason'],
+                        'trigger': result['trigger'],
+                        'overall_score': overall_score,
+                        'recommendation': recommendation,
+                        'sector': sector
+                    })
 
-                # Update tracking for next iteration
-                num_positions += 1
-                portfolio_cash -= result['total_cost']
+                    # Update tracking for next iteration
+                    num_positions += 1
+                    portfolio_cash -= result['total_cost']
 
-                # Update sector allocation
-                if sector and sector_allocation is not None:
-                    current_sector_value = (sector_allocation.get(sector, 0) / 100) * portfolio_total_value
-                    new_sector_value = current_sector_value + result['total_cost']
-                    new_total_value = portfolio_total_value  # Simplified (cash moved to stock)
-                    sector_allocation[sector] = (new_sector_value / new_total_value) * 100
+                    # Update sector allocation
+                    if sector and sector_allocation is not None:
+                        current_sector_value = (sector_allocation.get(sector, 0) / 100) * portfolio_total_value
+                        new_sector_value = current_sector_value + result['total_cost']
+                        new_total_value = portfolio_total_value  # Simplified (cash moved to stock)
+                        sector_allocation[sector] = (new_sector_value / new_total_value) * 100
 
-        return opportunities
+            return opportunities
 
     def get_alerts(self, limit: int = 50) -> List[Dict]:
         """Get recent auto-buy alerts."""
