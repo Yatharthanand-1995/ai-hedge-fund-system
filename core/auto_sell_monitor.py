@@ -24,6 +24,11 @@ class AutoSellRule:
     watch_ai_signals: bool = True  # Monitor AI recommendation changes
     max_position_age_days: Optional[int] = None  # Sell positions older than X days
 
+    # AI-first sell logic (Phase 4)
+    prioritize_ai_signals: bool = True  # AI signals override take-profit
+    defer_take_profit_on_strong_signals: bool = True  # Don't sell on take-profit if AI still bullish
+    ai_signal_sell_threshold: float = 50.0  # Sell if AI score drops below this (WEAK SELL territory)
+
 
 class AutoSellMonitor:
     """Monitors positions and triggers auto-sells based on rules."""
@@ -61,7 +66,10 @@ class AutoSellMonitor:
             'stop_loss_percent': rules.stop_loss_percent,
             'take_profit_percent': rules.take_profit_percent,
             'watch_ai_signals': rules.watch_ai_signals,
-            'max_position_age_days': rules.max_position_age_days
+            'max_position_age_days': rules.max_position_age_days,
+            'prioritize_ai_signals': rules.prioritize_ai_signals,
+            'defer_take_profit_on_strong_signals': rules.defer_take_profit_on_strong_signals,
+            'ai_signal_sell_threshold': rules.ai_signal_sell_threshold
         }
         with open(self.config_file, 'w') as f:
             json.dump(data, f, indent=2)
@@ -121,7 +129,10 @@ class AutoSellMonitor:
             'stop_loss_percent': self.rules.stop_loss_percent,
             'take_profit_percent': self.rules.take_profit_percent,
             'watch_ai_signals': self.rules.watch_ai_signals,
-            'max_position_age_days': self.rules.max_position_age_days
+            'max_position_age_days': self.rules.max_position_age_days,
+            'prioritize_ai_signals': self.rules.prioritize_ai_signals,
+            'defer_take_profit_on_strong_signals': self.rules.defer_take_profit_on_strong_signals,
+            'ai_signal_sell_threshold': self.rules.ai_signal_sell_threshold
         }
 
     def check_position(
@@ -131,10 +142,17 @@ class AutoSellMonitor:
         current_price: float,
         unrealized_pnl_percent: float,
         ai_recommendation: Optional[str] = None,
+        ai_score: Optional[float] = None,
         position_age_days: Optional[int] = None
     ) -> Dict:
         """
-        Check if position should be auto-sold.
+        Check if position should be auto-sold using PRIORITIZED trigger hierarchy.
+
+        PRIORITY ORDER (Phase 4 - AI-First Logic):
+        1. CRITICAL: Stop-loss (-10%) - Emergency exit, always honored
+        2. PRIMARY: AI downgrades (SELL/WEAK SELL) - Main exit driver
+        3. SECONDARY: Take-profit (+20%) - DEFERRED if AI still bullish
+        4. TERTIARY: Position age (180 days) - Portfolio cleanup
 
         Args:
             symbol: Stock symbol
@@ -142,65 +160,113 @@ class AutoSellMonitor:
             current_price: Current market price
             unrealized_pnl_percent: Current P&L percentage
             ai_recommendation: Current AI recommendation (e.g., 'SELL', 'HOLD', 'BUY')
+            ai_score: Current AI overall score (0-100)
             position_age_days: Days since position was opened
 
         Returns:
-            Dict with should_sell flag and reason
+            Dict with should_sell flag, reason, trigger, and urgency
         """
         if not self.rules.enabled:
             return {'should_sell': False, 'reason': None}
 
-        # Check stop-loss
+        # ==========================================
+        # PRIORITY 1 (CRITICAL): Stop-Loss
+        # ==========================================
         if unrealized_pnl_percent <= self.rules.stop_loss_percent:
             reason = f"Stop-loss triggered: {unrealized_pnl_percent:.2f}% loss (threshold: {self.rules.stop_loss_percent}%)"
             self._log_alert(symbol, reason, 'TRIGGERED', {
                 'unrealized_pnl_percent': unrealized_pnl_percent,
-                'threshold': self.rules.stop_loss_percent
+                'threshold': self.rules.stop_loss_percent,
+                'urgency': 'CRITICAL'
             })
             return {
                 'should_sell': True,
                 'reason': reason,
-                'trigger': 'stop_loss'
+                'trigger': 'stop_loss',
+                'urgency': 'CRITICAL'
             }
 
-        # Check take-profit
-        if unrealized_pnl_percent >= self.rules.take_profit_percent:
-            reason = f"Take-profit triggered: {unrealized_pnl_percent:.2f}% gain (threshold: {self.rules.take_profit_percent}%)"
-            self._log_alert(symbol, reason, 'TRIGGERED', {
-                'unrealized_pnl_percent': unrealized_pnl_percent,
-                'threshold': self.rules.take_profit_percent
-            })
-            return {
-                'should_sell': True,
-                'reason': reason,
-                'trigger': 'take_profit'
-            }
-
-        # Check AI signal
-        if self.rules.watch_ai_signals and ai_recommendation:
-            if ai_recommendation in ['SELL', 'WEAK SELL']:
-                reason = f"AI recommendation changed to {ai_recommendation}"
+        # ==========================================
+        # PRIORITY 2 (PRIMARY): AI Signal Downgrades
+        # ==========================================
+        if self.rules.watch_ai_signals and self.rules.prioritize_ai_signals and ai_recommendation:
+            # Immediate sell on SELL recommendation
+            if ai_recommendation == 'SELL':
+                score_info = f" (score: {ai_score:.1f})" if ai_score is not None else ""
+                reason = f"AI downgraded to SELL{score_info}"
                 self._log_alert(symbol, reason, 'TRIGGERED', {
-                    'ai_recommendation': ai_recommendation
+                    'ai_recommendation': ai_recommendation,
+                    'ai_score': ai_score,
+                    'urgency': 'IMMEDIATE'
                 })
                 return {
                     'should_sell': True,
                     'reason': reason,
-                    'trigger': 'ai_signal'
+                    'trigger': 'ai_signal',
+                    'urgency': 'IMMEDIATE'
                 }
 
-        # Check position age
+            # Sell on WEAK SELL (less urgent but still prioritized)
+            if ai_recommendation == 'WEAK SELL':
+                score_info = f" (score: {ai_score:.1f})" if ai_score is not None else ""
+                reason = f"AI downgraded to WEAK SELL{score_info}"
+                self._log_alert(symbol, reason, 'TRIGGERED', {
+                    'ai_recommendation': ai_recommendation,
+                    'ai_score': ai_score,
+                    'urgency': 'HIGH'
+                })
+                return {
+                    'should_sell': True,
+                    'reason': reason,
+                    'trigger': 'ai_signal',
+                    'urgency': 'HIGH'
+                }
+
+        # ==========================================
+        # PRIORITY 3 (SECONDARY): Take-Profit
+        # ==========================================
+        if unrealized_pnl_percent >= self.rules.take_profit_percent:
+            # Check if AI is still bullish - if so, DEFER take-profit
+            if (self.rules.defer_take_profit_on_strong_signals and
+                ai_recommendation in ['STRONG BUY', 'BUY']):
+                # DON'T sell - let winners run
+                return {
+                    'should_sell': False,
+                    'reason': f"Take-profit reached ({unrealized_pnl_percent:.2f}%) but AI still {ai_recommendation} - holding"
+                }
+            else:
+                # AI is neutral/bearish - take profits
+                ai_info = f" (AI: {ai_recommendation})" if ai_recommendation else ""
+                reason = f"Take-profit triggered: {unrealized_pnl_percent:.2f}% gain{ai_info}"
+                self._log_alert(symbol, reason, 'TRIGGERED', {
+                    'unrealized_pnl_percent': unrealized_pnl_percent,
+                    'threshold': self.rules.take_profit_percent,
+                    'ai_recommendation': ai_recommendation,
+                    'urgency': 'MEDIUM'
+                })
+                return {
+                    'should_sell': True,
+                    'reason': reason,
+                    'trigger': 'take_profit',
+                    'urgency': 'MEDIUM'
+                }
+
+        # ==========================================
+        # PRIORITY 4 (TERTIARY): Position Age
+        # ==========================================
         if self.rules.max_position_age_days and position_age_days:
             if position_age_days >= self.rules.max_position_age_days:
                 reason = f"Position age exceeded: {position_age_days} days (max: {self.rules.max_position_age_days})"
                 self._log_alert(symbol, reason, 'TRIGGERED', {
                     'position_age_days': position_age_days,
-                    'max_days': self.rules.max_position_age_days
+                    'max_days': self.rules.max_position_age_days,
+                    'urgency': 'LOW'
                 })
                 return {
                     'should_sell': True,
                     'reason': reason,
-                    'trigger': 'position_age'
+                    'trigger': 'position_age',
+                    'urgency': 'LOW'
                 }
 
         return {'should_sell': False, 'reason': None}

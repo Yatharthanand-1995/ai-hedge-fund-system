@@ -116,6 +116,7 @@ from core.parallel_executor import ParallelAgentExecutor
 from data.enhanced_provider import EnhancedYahooProvider
 from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
 from config.agent_weights import get_weight_percentages
+from scheduler.trading_scheduler import TradingScheduler
 
 # Configure logging with rotation
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -314,6 +315,9 @@ narrative_engine = InvestmentNarrativeEngine(llm_provider=LLM_PROVIDER)
 portfolio_manager = PortfolioManager()
 stock_scorer = StockScorer()
 data_provider = EnhancedYahooProvider()
+
+# Initialize trading scheduler (will be started in startup event)
+trading_scheduler = None
 
 # Initialize parallel executor with error handling (5 agents)
 parallel_executor = ParallelAgentExecutor(
@@ -2908,6 +2912,290 @@ async def get_automated_trading_status():
 
 
 # ===================================================================
+# TRADING SCHEDULER CONTROL
+# ===================================================================
+
+@app.get("/scheduler/status", tags=["Trading Scheduler"])
+async def get_scheduler_status():
+    """
+    Get trading scheduler status and next execution time.
+
+    Returns:
+        Scheduler status including:
+        - is_running: Whether scheduler is active
+        - next_execution: Next scheduled execution time (ISO format)
+        - last_execution: Last execution details
+        - total_executions: Total number of executions
+        - recent_executions: Last 5 executions
+    """
+    try:
+        if trading_scheduler is None:
+            return {
+                "is_running": False,
+                "error": "Scheduler not initialized"
+            }
+
+        status = trading_scheduler.get_status()
+        return {
+            "success": True,
+            "scheduler": status
+        }
+
+    except Exception as e:
+        logger.error(f"Get scheduler status error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scheduler/trigger", tags=["Trading Scheduler"])
+async def trigger_manual_execution():
+    """
+    Manually trigger a trading execution cycle (for testing).
+
+    This endpoint allows you to test the automated trading system
+    without waiting for the scheduled 4 PM ET execution.
+
+    Returns:
+        Execution result with status and summary
+    """
+    try:
+        if trading_scheduler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Scheduler not initialized"
+            )
+
+        logger.info("Manual trading execution triggered via API")
+        result = await trading_scheduler.trigger_manual_execution()
+
+        return {
+            "success": True,
+            "message": "Manual execution completed",
+            "execution": result
+        }
+
+    except Exception as e:
+        logger.error(f"Manual execution error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/scheduler/history", tags=["Trading Scheduler"])
+async def get_execution_history(limit: int = 50):
+    """
+    Get recent execution history.
+
+    Args:
+        limit: Maximum number of records to return (default 50, max 100)
+
+    Returns:
+        List of execution log entries with timestamp, status, and summary
+    """
+    try:
+        if trading_scheduler is None:
+            return {
+                "success": False,
+                "error": "Scheduler not initialized",
+                "history": []
+            }
+
+        limit = min(limit, 100)  # Cap at 100
+        history = trading_scheduler.get_execution_history(limit=limit)
+
+        return {
+            "success": True,
+            "count": len(history),
+            "history": history
+        }
+
+    except Exception as e:
+        logger.error(f"Get execution history error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scheduler/stop", tags=["Trading Scheduler"])
+async def stop_scheduler():
+    """
+    Stop the trading scheduler.
+
+    Disables automated daily trading executions until restarted.
+    Use this for emergency shutdown or maintenance.
+    """
+    try:
+        if trading_scheduler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Scheduler not initialized"
+            )
+
+        if not trading_scheduler.is_running:
+            return {
+                "success": True,
+                "message": "Scheduler is already stopped"
+            }
+
+        trading_scheduler.stop()
+        logger.info("Scheduler stopped via API")
+
+        return {
+            "success": True,
+            "message": "Scheduler stopped successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Stop scheduler error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scheduler/start", tags=["Trading Scheduler"])
+async def start_scheduler():
+    """
+    Start the trading scheduler.
+
+    Enables automated daily trading executions at 4 PM ET.
+    """
+    try:
+        global trading_scheduler
+
+        if trading_scheduler is None:
+            # Initialize if not already done
+            trading_scheduler = TradingScheduler(base_url="http://localhost:8010")
+
+        if trading_scheduler.is_running:
+            return {
+                "success": True,
+                "message": "Scheduler is already running",
+                "next_execution": trading_scheduler.get_next_execution_time()
+            }
+
+        trading_scheduler.start()
+        next_run = trading_scheduler.get_next_execution_time()
+        logger.info(f"Scheduler started via API - next execution at {next_run}")
+
+        return {
+            "success": True,
+            "message": "Scheduler started successfully",
+            "next_execution": next_run
+        }
+
+    except Exception as e:
+        logger.error(f"Start scheduler error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================================================================
+# PERFORMANCE DASHBOARD
+# ===================================================================
+
+from analysis.performance_dashboard import PerformanceDashboard
+
+performance_dashboard = PerformanceDashboard()
+
+
+@app.get("/performance/dashboard", tags=["Performance Tracking"])
+async def get_performance_dashboard(days: int = 30):
+    """
+    Get comprehensive performance metrics.
+
+    Args:
+        days: Number of days to analyze (default: 30)
+
+    Returns:
+        JSON with portfolio performance, risk metrics, and trading statistics
+    """
+    try:
+        metrics = performance_dashboard.calculate_metrics(days=days)
+        return {
+            "success": True,
+            "metrics": metrics
+        }
+
+    except Exception as e:
+        logger.error(f"Performance dashboard error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/performance/report", tags=["Performance Tracking"])
+async def get_performance_report(days: int = 30):
+    """
+    Get formatted performance report.
+
+    Args:
+        days: Number of days to analyze (default: 30)
+
+    Returns:
+        Formatted text report of portfolio performance
+    """
+    try:
+        report = performance_dashboard.generate_report(days=days)
+        return {
+            "success": True,
+            "report": report,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Performance report error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/performance/snapshot", tags=["Performance Tracking"])
+async def record_performance_snapshot():
+    """
+    Record current portfolio snapshot for performance tracking.
+
+    Fetches current portfolio state and SPY price, then records a snapshot.
+    This should be called daily (automatically by scheduler).
+    """
+    try:
+        # Get current portfolio with prices
+        from core.paper_portfolio_manager import PaperPortfolioManager
+        portfolio_mgr = PaperPortfolioManager()
+        portfolio = portfolio_mgr.get_portfolio_with_prices()
+
+        # Calculate total portfolio value
+        total_value = portfolio['cash']
+        for position in portfolio['positions'].values():
+            total_value += position.get('market_value', 0.0)
+
+        num_positions = len(portfolio['positions'])
+
+        # Get SPY price for benchmark
+        from data.enhanced_provider import EnhancedYahooProvider
+        provider = EnhancedYahooProvider()
+        spy_data = provider.get_comprehensive_data("SPY")
+        spy_price = spy_data.get('current_price', 0.0)
+
+        # Get current regime
+        try:
+            from core.market_regime_service import MarketRegimeService
+            regime_service = MarketRegimeService()
+            regime_data = regime_service.detect_regime()
+            regime = f"{regime_data['trend']}_{regime_data['volatility']}"
+        except:
+            regime = "UNKNOWN"
+
+        # Record snapshot
+        performance_dashboard.record_daily_snapshot(
+            portfolio_value=total_value,
+            cash=portfolio['cash'],
+            num_positions=num_positions,
+            spy_price=spy_price,
+            regime=regime
+        )
+
+        return {
+            "success": True,
+            "message": "Performance snapshot recorded",
+            "portfolio_value": total_value,
+            "spy_price": spy_price,
+            "regime": regime
+        }
+
+    except Exception as e:
+        logger.error(f"Record snapshot error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================================================================
 # SYSTEM ALERTS & MONITORING
 # ===================================================================
 
@@ -3111,6 +3399,8 @@ def add_sample_alerts():
 @app.on_event("startup")
 async def startup_event():
     """Startup event"""
+    global trading_scheduler
+
     logger.info("🏦 5-Agent AI Hedge Fund System starting up...")
     logger.info("✅ All 5 agents initialized")
     logger.info("✅ Narrative engine ready")
@@ -3121,10 +3411,30 @@ async def startup_event():
     # Initialize alerts system
     add_sample_alerts()
 
+    # Initialize and start trading scheduler
+    try:
+        trading_scheduler = TradingScheduler(base_url="http://localhost:8010")
+        trading_scheduler.start()
+        next_run = trading_scheduler.get_next_execution_time()
+        logger.info(f"✅ Trading scheduler started - next execution at {next_run}")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to start trading scheduler: {e}")
+        logger.warning("Paper trading automation will not be available")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event"""
+    global trading_scheduler
+
     logger.info("🛑 5-Agent AI Hedge Fund System shutting down...")
+
+    # Stop trading scheduler
+    if trading_scheduler and trading_scheduler.is_running:
+        try:
+            trading_scheduler.stop()
+            logger.info("✅ Trading scheduler stopped")
+        except Exception as e:
+            logger.error(f"Error stopping trading scheduler: {e}")
 
 if __name__ == "__main__":
     import uvicorn

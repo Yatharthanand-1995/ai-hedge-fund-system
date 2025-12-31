@@ -9,10 +9,14 @@ Monitors market opportunities and automatically buys based on:
 """
 
 import json
+import logging
+import requests
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,6 +31,12 @@ class AutoBuyRule:
     max_single_trade_amount: float = 2000.0  # Max $ amount per trade
     require_sector_diversification: bool = True  # Avoid overconcentration in one sector
     max_sector_allocation_percent: float = 30.0  # Max 30% per sector
+
+    # Score-weighted position sizing (NEW)
+    use_score_weighted_sizing: bool = False  # Enable exponential score weighting
+    score_weight_exponent: float = 1.5  # Exponent for score weighting curve (1.0=linear, 1.5=exponential)
+    min_score_multiplier: float = 0.5  # Minimum multiplier for lowest scores (70 → 0.5x)
+    max_score_multiplier: float = 1.5  # Maximum multiplier for highest scores (100 → 1.5x)
 
     def __post_init__(self):
         """Set defaults for mutable fields."""
@@ -74,7 +84,12 @@ class AutoBuyMonitor:
             'auto_buy_recommendations': rules.auto_buy_recommendations,
             'max_single_trade_amount': rules.max_single_trade_amount,
             'require_sector_diversification': rules.require_sector_diversification,
-            'max_sector_allocation_percent': rules.max_sector_allocation_percent
+            'max_sector_allocation_percent': rules.max_sector_allocation_percent,
+            # Score-weighted sizing fields
+            'use_score_weighted_sizing': rules.use_score_weighted_sizing,
+            'score_weight_exponent': rules.score_weight_exponent,
+            'min_score_multiplier': rules.min_score_multiplier,
+            'max_score_multiplier': rules.max_score_multiplier
         }
         with open(self.config_file, 'w') as f:
             json.dump(data, f, indent=2)
@@ -127,7 +142,11 @@ class AutoBuyMonitor:
                 'auto_buy_recommendations': self.rules.auto_buy_recommendations,
                 'max_single_trade_amount': self.rules.max_single_trade_amount,
                 'require_sector_diversification': self.rules.require_sector_diversification,
-                'max_sector_allocation_percent': self.rules.max_sector_allocation_percent
+                'max_sector_allocation_percent': self.rules.max_sector_allocation_percent,
+                'use_score_weighted_sizing': self.rules.use_score_weighted_sizing,
+                'score_weight_exponent': self.rules.score_weight_exponent,
+                'min_score_multiplier': self.rules.min_score_multiplier,
+                'max_score_multiplier': self.rules.max_score_multiplier
             }
         }
 
@@ -142,7 +161,11 @@ class AutoBuyMonitor:
             'auto_buy_recommendations': self.rules.auto_buy_recommendations,
             'max_single_trade_amount': self.rules.max_single_trade_amount,
             'require_sector_diversification': self.rules.require_sector_diversification,
-            'max_sector_allocation_percent': self.rules.max_sector_allocation_percent
+            'max_sector_allocation_percent': self.rules.max_sector_allocation_percent,
+            'use_score_weighted_sizing': self.rules.use_score_weighted_sizing,
+            'score_weight_exponent': self.rules.score_weight_exponent,
+            'min_score_multiplier': self.rules.min_score_multiplier,
+            'max_score_multiplier': self.rules.max_score_multiplier
         }
 
     def _check_confidence_level(self, confidence: str) -> bool:
@@ -151,6 +174,56 @@ class AutoBuyMonitor:
         min_level = levels.get(self.rules.min_confidence_level, 2)
         actual_level = levels.get(confidence, 1)
         return actual_level >= min_level
+
+    def _get_regime_adjusted_threshold(self) -> tuple[float, float]:
+        """
+        Get threshold and position size multiplier based on market regime.
+
+        Returns: (score_threshold, position_size_multiplier)
+
+        Market regimes and their thresholds:
+        - BULL + NORMAL_VOL: Standard (70.0, 1.0)
+        - BULL + HIGH_VOL: Slightly cautious (72.0, 0.9)
+        - BEAR + HIGH_VOL: Very selective (78.0, 0.6)
+        - BEAR + NORMAL_VOL: Higher bar (75.0, 0.75)
+        - SIDEWAYS + NORMAL_VOL: Moderate (72.0, 0.85)
+        - SIDEWAYS + HIGH_VOL: Conservative (74.0, 0.8)
+        """
+        try:
+            # Fetch current regime (cached 6 hours on server side)
+            response = requests.get("http://localhost:8010/market/regime", timeout=5)
+            regime_data = response.json()
+
+            trend = regime_data.get('trend', 'SIDEWAYS')
+            volatility = regime_data.get('volatility', 'NORMAL_VOL')
+            regime = f"{trend}_{volatility}"
+
+            # Threshold mapping
+            thresholds = {
+                # BULL market regimes
+                'BULL_LOW_VOL': (70.0, 1.0),      # Ideal conditions - full allocation
+                'BULL_NORMAL_VOL': (70.0, 1.0),   # Standard - aggressive buying
+                'BULL_HIGH_VOL': (72.0, 0.9),     # Slight caution - volatility risk
+
+                # BEAR market regimes
+                'BEAR_LOW_VOL': (76.0, 0.8),      # Defensive but stable
+                'BEAR_NORMAL_VOL': (75.0, 0.75),  # Higher bar - defensive
+                'BEAR_HIGH_VOL': (78.0, 0.6),     # Very selective - dangerous market
+
+                # SIDEWAYS market regimes
+                'SIDEWAYS_LOW_VOL': (71.0, 0.9),      # Wait for direction but stable
+                'SIDEWAYS_NORMAL_VOL': (72.0, 0.85),  # Moderate - wait for breakout
+                'SIDEWAYS_HIGH_VOL': (74.0, 0.8),     # Conservative - uncertain direction
+            }
+
+            threshold, multiplier = thresholds.get(regime, (75.0, 0.9))  # Default: conservative
+
+            logger.info(f"Market regime: {regime} → threshold={threshold}, multiplier={multiplier:.2f}")
+            return threshold, multiplier
+
+        except Exception as e:
+            logger.warning(f"Could not fetch market regime, using default threshold: {e}")
+            return (75.0, 1.0)  # Fallback to conservative default
 
     def _get_sector_allocation(self, portfolio: Dict, sector_mapping: Dict[str, List[str]]) -> Dict[str, float]:
         """Calculate current sector allocation percentages."""
@@ -184,6 +257,55 @@ class AutoBuyMonitor:
             sector_percentages = {}
 
         return sector_percentages
+
+    def _calculate_score_weighted_position(
+        self,
+        overall_score: float,
+        portfolio_total_value: float,
+        num_positions: int
+    ) -> float:
+        """
+        Calculate position size using exponential score weighting.
+
+        Higher scores get exponentially larger allocations:
+        - Score 70: 0.5x multiplier → ~5% of portfolio
+        - Score 80: 0.83x multiplier → ~8.3%
+        - Score 90: 1.28x multiplier → ~12.8%
+        - Score 95: 1.44x multiplier → ~14.4%
+
+        Formula: position_size = base_allocation * (0.5 + normalized_score^1.5)
+
+        Args:
+            overall_score: AI overall score (0-100)
+            portfolio_total_value: Total portfolio value (cash + positions)
+            num_positions: Current number of positions
+
+        Returns:
+            Calculated position size in dollars
+        """
+        # Normalize score to 0-1 range (70-100 → 0-1)
+        # Scores below 70 shouldn't trigger buys, but clamp just in case
+        normalized_score = (overall_score - 70) / 30
+        normalized_score = max(0, min(1, normalized_score))
+
+        # Exponential multiplier (0.5 to 1.5x)
+        # Use exponent from config (default: 1.5)
+        exponent = getattr(self.rules, 'score_weight_exponent', 1.5)
+        multiplier = 0.5 + (normalized_score ** exponent)
+
+        # Base allocation: divide portfolio by target number of positions (default 10)
+        # This ensures we don't over-allocate even with high scores
+        target_positions = max(self.rules.max_positions, 10)
+        base_allocation = portfolio_total_value / target_positions
+
+        # Apply multiplier
+        position_size = base_allocation * multiplier
+
+        # Respect max limits from rules
+        max_by_percent = portfolio_total_value * (self.rules.max_position_size_percent / 100)
+        position_size = min(position_size, max_by_percent, self.rules.max_single_trade_amount)
+
+        return position_size
 
     def check_opportunity(
         self,
@@ -237,12 +359,15 @@ class AutoBuyMonitor:
                 'reason': f'Maximum positions reached ({self.rules.max_positions})'
             }
 
-        # Check score threshold
-        if overall_score < self.rules.min_score_threshold:
+        # Get regime-adjusted threshold and position size multiplier
+        regime_threshold, regime_multiplier = self._get_regime_adjusted_threshold()
+
+        # Check score threshold (regime-adaptive)
+        if overall_score < regime_threshold:
             return {
                 'should_buy': False,
                 'shares': 0,
-                'reason': f'Score {overall_score:.1f} below threshold {self.rules.min_score_threshold}'
+                'reason': f'Score {overall_score:.1f} below regime-adjusted threshold {regime_threshold}'
             }
 
         # Check recommendation
@@ -272,9 +397,25 @@ class AutoBuyMonitor:
                 }
 
         # Calculate position size
-        # Use smaller of: max_position_size_percent or max_single_trade_amount
-        max_by_percent = portfolio_total_value * (self.rules.max_position_size_percent / 100)
-        max_amount = min(max_by_percent, self.rules.max_single_trade_amount)
+        # Use score-weighted sizing if enabled, otherwise use fixed sizing
+        use_score_weighting = getattr(self.rules, 'use_score_weighted_sizing', False)
+
+        if use_score_weighting:
+            # Score-weighted position sizing (exponential)
+            max_amount = self._calculate_score_weighted_position(
+                overall_score=overall_score,
+                portfolio_total_value=portfolio_total_value,
+                num_positions=num_positions
+            )
+        else:
+            # Fixed position sizing (original logic)
+            # Use smaller of: max_position_size_percent or max_single_trade_amount
+            max_by_percent = portfolio_total_value * (self.rules.max_position_size_percent / 100)
+            max_amount = min(max_by_percent, self.rules.max_single_trade_amount)
+
+        # Apply regime-based position size multiplier
+        # In volatile/bearish markets, reduce position sizes for risk management
+        max_amount = max_amount * regime_multiplier
 
         # Check if we have enough cash
         if portfolio_cash < current_price:
