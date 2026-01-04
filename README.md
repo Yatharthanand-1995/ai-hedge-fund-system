@@ -24,6 +24,24 @@ The system generates comprehensive investment narratives that include:
 - **Confidence Level**: HIGH/MEDIUM/LOW based on agent consensus
 - **Position Sizing**: Recommended portfolio allocation
 
+## 🌐 Live Demo
+
+A live demonstration of the **Stock Analysis** feature is deployed on Vercel:
+
+**[View Live Demo](https://your-vercel-url.vercel.app)** *(URL will be updated after deployment)*
+
+### Demo Features
+- 📊 Real-time analysis of 50 elite S&P 100 stocks
+- 🤖 5-agent AI scoring system in action
+- 📈 Professional investment recommendations
+- 🔍 Advanced filtering and sorting capabilities
+- 💡 Detailed investment theses with strengths and risks
+
+### Important Note
+The demo requires the backend API to be running locally for live data. For the **full experience** with all features (Portfolio Manager, Backtesting, Paper Trading, etc.), follow the local installation guide below.
+
+See [VERCEL_DEMO_README.md](./VERCEL_DEMO_README.md) for demo-specific documentation.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
