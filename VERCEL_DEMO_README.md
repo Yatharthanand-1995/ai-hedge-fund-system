@@ -4,7 +4,7 @@
 
 This is a **portfolio showcase deployment** of the AI-Powered Hedge Fund Stock Analysis System.
 
-- **Live URL**: [Your Vercel URL will be here after deployment]
+- **Live URL**: https://ai-hedge-fund-stock-analysis-demo-iz5povweo.vercel.app
 - **Feature**: AI-powered stock analysis of 50 elite stocks
 - **Technology**: 5-agent AI system with weighted scoring
 
