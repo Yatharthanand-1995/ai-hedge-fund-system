@@ -13,6 +13,8 @@ from pathlib import Path
 from functools import lru_cache
 from cachetools import TTLCache
 
+from .portfolio_lock_manager import PortfolioLockManager
+
 
 class PaperPortfolioManager:
     """Manages paper trading portfolio with transaction logging."""
@@ -28,6 +30,9 @@ class PaperPortfolioManager:
 
         # Ensure data directory exists
         self.portfolio_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Initialize lock manager for cross-process safety
+        self.lock_manager = PortfolioLockManager()
 
         # Price cache with automatic eviction: max 500 symbols, 60s TTL
         # Prevents memory leak from unbounded dict growth
@@ -51,15 +56,50 @@ class PaperPortfolioManager:
             self._save_portfolio()
 
     def _save_portfolio(self):
-        """Save portfolio to disk."""
+        """Save portfolio to disk with atomic write."""
         data = {
             'cash': self.cash,
             'positions': self.positions,
             'created_at': self.created_at,
             'updated_at': datetime.now().isoformat()
         }
-        with open(self.portfolio_file, 'w') as f:
-            json.dump(data, f, indent=2)
+
+        # Write to temp file, then rename (atomic)
+        temp_file = Path(str(self.portfolio_file) + '.tmp')
+
+        try:
+            with open(temp_file, 'w') as f:
+                json.dump(data, f, indent=2)
+
+            # Atomic rename (overwrites existing file)
+            temp_file.replace(self.portfolio_file)
+
+        except Exception as e:
+            # Clean up temp file on error
+            if temp_file.exists():
+                temp_file.unlink()
+            raise
+
+    def _reload_portfolio_from_disk(self):
+        """
+        Reload portfolio state from disk.
+
+        CRITICAL: Must be called AFTER acquiring lock to ensure fresh data.
+        This prevents race conditions where multiple processes have stale state.
+        """
+        if self.portfolio_file.exists():
+            try:
+                with open(self.portfolio_file, 'r') as f:
+                    data = json.load(f)
+                    self.cash = data.get('cash', self.INITIAL_CASH)
+                    self.positions = data.get('positions', {})
+                    # Don't update created_at - that's immutable
+            except Exception as e:
+                # If reload fails, keep current state but log error
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to reload portfolio from disk: {e}")
+                raise
 
     def _log_transaction(self, action: str, symbol: str, shares: int, price: float, total: float):
         """Log transaction to transaction log file."""
@@ -136,7 +176,7 @@ class PaperPortfolioManager:
 
     def buy(self, symbol: str, shares: int, price: float) -> Dict:
         """
-        Buy shares of a stock.
+        Buy shares of a stock with file locking.
 
         Args:
             symbol: Stock symbol
@@ -146,7 +186,7 @@ class PaperPortfolioManager:
         Returns:
             Dict with status and message
         """
-        # Validate inputs
+        # Validate inputs (before acquiring lock)
         validation_error = self._validate_trade_inputs(shares, price, 'buy')
         if validation_error:
             return {'success': False, 'message': validation_error}
@@ -157,51 +197,84 @@ class PaperPortfolioManager:
 
         total_cost = shares * price
 
-        # Check if we have enough cash
-        if total_cost > self.cash:
-            return {
-                'success': False,
-                'message': f'Insufficient funds. Need ${total_cost:.2f}, have ${self.cash:.2f}'
-            }
+        # Acquire lock for critical section
+        with self.lock_manager.acquire_lock(f"buy_{symbol}"):
+            # CRITICAL FIX: Reload portfolio from disk AFTER acquiring lock
+            # This ensures we have fresh data, preventing race conditions
+            self._reload_portfolio_from_disk()
 
-        # Execute buy
-        self.cash -= total_cost
+            # Check cash with fresh data
+            if total_cost > self.cash:
+                return {
+                    'success': False,
+                    'message': f'Insufficient funds. Need ${total_cost:.2f}, have ${self.cash:.2f}'
+                }
 
-        if symbol in self.positions:
-            # Average cost basis calculation
-            existing_shares = self.positions[symbol]['shares']
-            existing_cost_basis = self.positions[symbol]['cost_basis']
-            total_shares = existing_shares + shares
-            new_cost_basis = ((existing_shares * existing_cost_basis) + total_cost) / total_shares
+            # Store previous state for rollback
+            prev_cash = self.cash
+            prev_position = self.positions.get(symbol, None).copy() if symbol in self.positions else None
 
-            self.positions[symbol] = {
-                'shares': total_shares,
-                'cost_basis': new_cost_basis,
-                'first_purchase_date': self.positions[symbol].get('first_purchase_date', datetime.now().isoformat())
-            }
-        else:
-            self.positions[symbol] = {
-                'shares': shares,
-                'cost_basis': price,
-                'first_purchase_date': datetime.now().isoformat()
-            }
+            try:
+                # Execute buy
+                self.cash -= total_cost
 
-        # Save portfolio
-        self._save_portfolio()
+                if symbol in self.positions:
+                    # Average cost basis calculation
+                    existing_shares = self.positions[symbol]['shares']
+                    existing_cost_basis = self.positions[symbol]['cost_basis']
+                    total_shares = existing_shares + shares
+                    new_cost_basis = ((existing_shares * existing_cost_basis) + total_cost) / total_shares
 
-        # Log transaction
-        self._log_transaction('BUY', symbol, shares, price, total_cost)
+                    self.positions[symbol] = {
+                        'shares': total_shares,
+                        'cost_basis': new_cost_basis,
+                        'first_purchase_date': self.positions[symbol].get('first_purchase_date', datetime.now().isoformat())
+                    }
+                else:
+                    self.positions[symbol] = {
+                        'shares': shares,
+                        'cost_basis': price,
+                        'first_purchase_date': datetime.now().isoformat()
+                    }
 
-        return {
-            'success': True,
-            'message': f'Bought {shares} shares of {symbol} at ${price:.2f}',
-            'total_cost': total_cost,
-            'cash_remaining': self.cash
-        }
+                # Save portfolio - if this fails, rollback will trigger
+                self._save_portfolio()
+
+                # Log transaction - if this fails, transaction is still saved to portfolio
+                try:
+                    self._log_transaction('BUY', symbol, shares, price, total_cost)
+                except Exception as log_error:
+                    # Don't fail the whole transaction if logging fails
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Transaction executed but logging failed: {log_error}")
+
+                return {
+                    'success': True,
+                    'message': f'Bought {shares} shares of {symbol} at ${price:.2f}',
+                    'total_cost': total_cost,
+                    'cash_remaining': self.cash
+                }
+
+            except Exception as e:
+                # Rollback on ANY failure (including save failures)
+                self.cash = prev_cash
+                if prev_position is None:
+                    # Remove newly added position
+                    if symbol in self.positions:
+                        del self.positions[symbol]
+                else:
+                    # Restore previous position
+                    self.positions[symbol] = prev_position
+
+                return {
+                    'success': False,
+                    'message': f'Buy failed: {str(e)}'
+                }
 
     def sell(self, symbol: str, shares: int, price: float) -> Dict:
         """
-        Sell shares of a stock.
+        Sell shares of a stock with file locking.
 
         Args:
             symbol: Stock symbol
@@ -211,7 +284,7 @@ class PaperPortfolioManager:
         Returns:
             Dict with status and message
         """
-        # Validate inputs
+        # Validate inputs (before acquiring lock)
         validation_error = self._validate_trade_inputs(shares, price, 'sell')
         if validation_error:
             return {'success': False, 'message': validation_error}
@@ -220,49 +293,76 @@ class PaperPortfolioManager:
         if not symbol or not isinstance(symbol, str):
             return {'success': False, 'message': 'Invalid symbol'}
 
-        # Check if we own this stock
-        if symbol not in self.positions:
-            return {'success': False, 'message': f'You do not own {symbol}'}
+        # Acquire lock for critical section
+        with self.lock_manager.acquire_lock(f"sell_{symbol}"):
+            # CRITICAL FIX: Reload portfolio from disk AFTER acquiring lock
+            # This ensures we have fresh data, preventing race conditions
+            self._reload_portfolio_from_disk()
 
-        # Check if we have enough shares
-        owned_shares = self.positions[symbol]['shares']
-        if shares > owned_shares:
-            return {
-                'success': False,
-                'message': f'Insufficient shares. Own {owned_shares}, trying to sell {shares}'
-            }
+            # Check ownership with fresh data
+            if symbol not in self.positions:
+                return {'success': False, 'message': f'You do not own {symbol}'}
 
-        # Execute sell
-        total_proceeds = shares * price
-        self.cash += total_proceeds
+            # Check if we have enough shares
+            owned_shares = self.positions[symbol]['shares']
+            if shares > owned_shares:
+                return {
+                    'success': False,
+                    'message': f'Insufficient shares. Own {owned_shares}, trying to sell {shares}'
+                }
 
-        # Calculate P&L
-        cost_basis = self.positions[symbol]['cost_basis']
-        pnl = (price - cost_basis) * shares
-        pnl_percent = ((price - cost_basis) / cost_basis) * 100
+            # Store previous state for rollback
+            prev_cash = self.cash
+            prev_position = self.positions[symbol].copy()
 
-        # Update position
-        if shares == owned_shares:
-            # Sold entire position
-            del self.positions[symbol]
-        else:
-            # Partial sale
-            self.positions[symbol]['shares'] -= shares
+            try:
+                # Execute sell
+                total_proceeds = shares * price
+                self.cash += total_proceeds
 
-        # Save portfolio
-        self._save_portfolio()
+                # Calculate P&L
+                cost_basis = self.positions[symbol]['cost_basis']
+                pnl = (price - cost_basis) * shares
+                pnl_percent = ((price - cost_basis) / cost_basis) * 100
 
-        # Log transaction
-        self._log_transaction('SELL', symbol, shares, price, total_proceeds)
+                # Update position
+                if shares == owned_shares:
+                    # Sold entire position
+                    del self.positions[symbol]
+                else:
+                    # Partial sale
+                    self.positions[symbol]['shares'] -= shares
 
-        return {
-            'success': True,
-            'message': f'Sold {shares} shares of {symbol} at ${price:.2f}',
-            'total_proceeds': total_proceeds,
-            'pnl': pnl,
-            'pnl_percent': pnl_percent,
-            'cash_remaining': self.cash
-        }
+                # Save portfolio - if this fails, rollback will trigger
+                self._save_portfolio()
+
+                # Log transaction - if this fails, transaction is still saved to portfolio
+                try:
+                    self._log_transaction('SELL', symbol, shares, price, total_proceeds)
+                except Exception as log_error:
+                    # Don't fail the whole transaction if logging fails
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Transaction executed but logging failed: {log_error}")
+
+                return {
+                    'success': True,
+                    'message': f'Sold {shares} shares of {symbol} at ${price:.2f}',
+                    'total_proceeds': total_proceeds,
+                    'pnl': pnl,
+                    'pnl_percent': pnl_percent,
+                    'cash_remaining': self.cash
+                }
+
+            except Exception as e:
+                # Rollback on ANY failure (including save failures)
+                self.cash = prev_cash
+                self.positions[symbol] = prev_position
+
+                return {
+                    'success': False,
+                    'message': f'Sell failed: {str(e)}'
+                }
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
         """

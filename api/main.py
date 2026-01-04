@@ -118,6 +118,7 @@ from data.enhanced_provider import EnhancedYahooProvider
 from data.us_top_100_stocks import US_TOP_100_STOCKS, SECTOR_MAPPING
 from config.agent_weights import get_weight_percentages
 from scheduler.trading_scheduler import TradingScheduler
+from monitoring.monitoring_scheduler import MonitoringScheduler
 
 # Configure logging with rotation
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -318,6 +319,9 @@ data_provider = EnhancedYahooProvider()
 
 # Initialize trading scheduler (will be started in startup event)
 trading_scheduler = None
+
+# Initialize monitoring scheduler (will be started in startup event)
+monitoring_scheduler = None
 
 # Initialize parallel executor with error handling (5 agents)
 parallel_executor = ParallelAgentExecutor(
@@ -3140,6 +3144,386 @@ async def start_scheduler():
 
 
 # ===================================================================
+# SIGNAL MONITORING SYSTEM
+# ===================================================================
+
+@app.get("/monitoring/status", tags=["Signal Monitoring"])
+async def get_monitoring_status():
+    """
+    Get signal monitoring system status.
+
+    Returns:
+        Current monitoring status, watchlist, and configuration
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            return {
+                "success": False,
+                "monitoring_enabled": False,
+                "message": "Monitoring scheduler not initialized"
+            }
+
+        status = monitoring_scheduler.get_status()
+        monitor_status = monitoring_scheduler.monitor.get_monitoring_status()
+
+        return {
+            "success": True,
+            **status,
+            **monitor_status
+        }
+
+    except Exception as e:
+        logger.error(f"Get monitoring status error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/monitoring/activate", tags=["Signal Monitoring"])
+async def activate_monitoring():
+    """
+    Activate the trading system (system_active = true).
+
+    When active, the system will execute trades based on signal changes.
+    """
+    try:
+        import json
+        from pathlib import Path
+
+        config_file = Path("data/monitoring_config.json")
+        if not config_file.exists():
+            raise HTTPException(status_code=404, detail="Monitoring configuration not found")
+
+        # Load config
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        # Update system_active
+        config['system_active'] = True
+
+        # Save config
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+
+        # Touch the file to update mtime (triggers scheduler reload)
+        try:
+            config_file.touch()
+            logger.info("✅ Config activated and scheduler notified")
+        except Exception as e:
+            logger.warning(f"Could not update config mtime: {e}")
+
+        logger.info("⚡ Trading system ACTIVATED via API - will execute trades on signal changes")
+
+        return {
+            "success": True,
+            "system_active": True,
+            "message": "Trading system activated. Will execute trades based on signal changes.",
+            "warning": "System will now automatically buy/sell based on AI signals"
+        }
+
+    except Exception as e:
+        logger.error(f"Activate monitoring error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/monitoring/deactivate", tags=["Signal Monitoring"])
+async def deactivate_monitoring():
+    """
+    Deactivate the trading system (system_active = false).
+
+    When inactive, the system will monitor and log signals but NOT execute trades.
+    """
+    try:
+        import json
+        from pathlib import Path
+
+        config_file = Path("data/monitoring_config.json")
+        if not config_file.exists():
+            raise HTTPException(status_code=404, detail="Monitoring configuration not found")
+
+        # Load config
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        # Update system_active
+        config['system_active'] = False
+
+        # Save config
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+
+        logger.info("🛑 Trading system DEACTIVATED via API - monitoring only mode")
+
+        return {
+            "success": True,
+            "system_active": False,
+            "message": "Trading system deactivated. Monitoring signals but NOT executing trades.",
+            "info": "System will log signal changes for analysis"
+        }
+
+    except Exception as e:
+        logger.error(f"Deactivate monitoring error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/monitoring/reload-config", tags=["Signal Monitoring"])
+async def reload_monitoring_config():
+    """
+    Force immediate config reload in monitoring scheduler.
+
+    This endpoint manually triggers a config reload, useful for testing
+    or ensuring immediate application of config changes.
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring scheduler not initialized")
+
+        # Call the reload method directly
+        monitoring_scheduler._reload_config_if_changed()
+
+        current_active = monitoring_scheduler.config.get('system_active', False)
+
+        return {
+            "success": True,
+            "system_active": current_active,
+            "message": "Config reloaded successfully",
+            "monitoring_enabled": monitoring_scheduler.config.get('monitoring', {}).get('enabled', True)
+        }
+
+    except Exception as e:
+        logger.error(f"Config reload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/monitoring/signal-history", tags=["Signal Monitoring"])
+async def get_signal_history(
+    symbol: Optional[str] = None,
+    days: int = 7,
+    limit: int = 50
+):
+    """
+    Get signal change history.
+
+    Args:
+        symbol: Filter by symbol (optional)
+        days: Number of days to look back (default: 7)
+        limit: Maximum number of changes to return (default: 50)
+
+    Returns:
+        List of signal changes with timestamps and details
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        from datetime import datetime, timedelta
+
+        if symbol:
+            # Get changes for specific symbol
+            changes = monitoring_scheduler.monitor.signal_history.get_changes_for_symbol(
+                symbol, limit=limit
+            )
+        else:
+            # Get all recent changes
+            since = datetime.now() - timedelta(days=days)
+            changes = monitoring_scheduler.monitor.signal_history.get_changes_since(since)
+            changes = sorted(changes, key=lambda x: x['timestamp'], reverse=True)[:limit]
+
+        return {
+            "success": True,
+            "changes": changes,
+            "count": len(changes),
+            "symbol": symbol,
+            "days": days
+        }
+
+    except Exception as e:
+        logger.error(f"Get signal history error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/monitoring/current-signals", tags=["Signal Monitoring"])
+async def get_current_signals():
+    """
+    Get current signals for all monitored stocks.
+
+    Returns:
+        Dictionary of current signals with scores and last updated timestamps
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        current_signals = monitoring_scheduler.monitor.signal_history.data.get('current_signals', {})
+
+        return {
+            "success": True,
+            "signals": current_signals,
+            "count": len(current_signals)
+        }
+
+    except Exception as e:
+        logger.error(f"Get current signals error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/monitoring/trigger", tags=["Signal Monitoring"])
+async def trigger_monitoring_cycle():
+    """
+    Manually trigger a monitoring cycle (for testing).
+
+    Executes one monitoring cycle immediately.
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        logger.info("🔧 Manual monitoring cycle triggered via API")
+        stats = await monitoring_scheduler.trigger_manual_cycle()
+
+        return {
+            "success": True,
+            "message": "Monitoring cycle completed",
+            "stats": stats
+        }
+
+    except Exception as e:
+        logger.error(f"Trigger monitoring error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/monitoring/statistics", tags=["Signal Monitoring"])
+async def get_monitoring_statistics():
+    """
+    Get signal monitoring statistics.
+
+    Returns:
+        Statistics about signal changes, urgency levels, and change types
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        stats = monitoring_scheduler.monitor.signal_history.get_statistics()
+
+        return {
+            "success": True,
+            **stats
+        }
+
+    except Exception as e:
+        logger.error(f"Get monitoring statistics error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/monitoring/watchlist/add", tags=["Signal Monitoring"])
+async def add_to_watchlist(symbols: List[str]):
+    """
+    Add stock(s) to the hot watchlist for monitoring.
+
+    Args:
+        symbols: List of stock symbols to add (e.g., ["AAPL", "GOOGL"])
+
+    Returns:
+        Success status and updated watchlist
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        # Add symbols to watchlist
+        for symbol in symbols:
+            monitoring_scheduler.monitor.add_to_watchlist(symbol.upper())
+
+        watchlist = monitoring_scheduler.monitor.get_watchlist()
+
+        return {
+            "success": True,
+            "message": f"Added {len(symbols)} symbol(s) to watchlist",
+            "watchlist": watchlist,
+            "watchlist_count": len(watchlist)
+        }
+
+    except Exception as e:
+        logger.error(f"Add to watchlist error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/monitoring/watchlist/remove", tags=["Signal Monitoring"])
+async def remove_from_watchlist(symbols: List[str]):
+    """
+    Remove stock(s) from the hot watchlist.
+
+    Args:
+        symbols: List of stock symbols to remove (e.g., ["AAPL", "GOOGL"])
+
+    Returns:
+        Success status and updated watchlist
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        # Remove symbols from watchlist
+        for symbol in symbols:
+            monitoring_scheduler.monitor.remove_from_watchlist(symbol.upper())
+
+        watchlist = monitoring_scheduler.monitor.get_watchlist()
+
+        return {
+            "success": True,
+            "message": f"Removed {len(symbols)} symbol(s) from watchlist",
+            "watchlist": watchlist,
+            "watchlist_count": len(watchlist)
+        }
+
+    except Exception as e:
+        logger.error(f"Remove from watchlist error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/monitoring/watchlist", tags=["Signal Monitoring"])
+async def get_watchlist():
+    """
+    Get current hot watchlist.
+
+    Returns:
+        List of symbols being actively monitored
+    """
+    try:
+        global monitoring_scheduler
+
+        if monitoring_scheduler is None:
+            raise HTTPException(status_code=503, detail="Monitoring not initialized")
+
+        watchlist = monitoring_scheduler.monitor.get_watchlist()
+
+        return {
+            "success": True,
+            "watchlist": watchlist,
+            "watchlist_count": len(watchlist)
+        }
+
+    except Exception as e:
+        logger.error(f"Get watchlist error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================================================================
 # PERFORMANCE DASHBOARD
 # ===================================================================
 
@@ -3458,7 +3842,7 @@ def add_sample_alerts():
 @app.on_event("startup")
 async def startup_event():
     """Startup event"""
-    global trading_scheduler
+    global trading_scheduler, monitoring_scheduler
 
     logger.info("🏦 5-Agent AI Hedge Fund System starting up...")
     logger.info("✅ All 5 agents initialized")
@@ -3480,10 +3864,20 @@ async def startup_event():
         logger.error(f"⚠️  Failed to start trading scheduler: {e}")
         logger.warning("Paper trading automation will not be available")
 
+    # Initialize and start monitoring scheduler
+    try:
+        monitoring_scheduler = MonitoringScheduler(base_url="http://localhost:8010")
+        monitoring_scheduler.start()
+        next_monitor = monitoring_scheduler.get_next_execution_time()
+        logger.info(f"✅ Signal monitoring scheduler started - next check at {next_monitor}")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to start monitoring scheduler: {e}")
+        logger.warning("Signal monitoring will not be available")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event"""
-    global trading_scheduler
+    global trading_scheduler, monitoring_scheduler
 
     logger.info("🛑 5-Agent AI Hedge Fund System shutting down...")
 
@@ -3494,6 +3888,14 @@ async def shutdown_event():
             logger.info("✅ Trading scheduler stopped")
         except Exception as e:
             logger.error(f"Error stopping trading scheduler: {e}")
+
+    # Stop monitoring scheduler
+    if monitoring_scheduler and monitoring_scheduler.is_running:
+        try:
+            monitoring_scheduler.stop()
+            logger.info("✅ Monitoring scheduler stopped")
+        except Exception as e:
+            logger.error(f"Error stopping monitoring scheduler: {e}")
 
 if __name__ == "__main__":
     import uvicorn

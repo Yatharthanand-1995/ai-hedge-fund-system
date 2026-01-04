@@ -158,6 +158,9 @@ class TradingScheduler:
             Dict with success status and summary
         """
         try:
+            # Process buy queue from monitoring system (if any)
+            await self._process_buy_queue()
+
             # Call the unified auto-trade endpoint
             response = await asyncio.to_thread(
                 requests.post,
@@ -194,6 +197,186 @@ class TradingScheduler:
                 'success': False,
                 'error': f"Unexpected error: {str(e)}"
             }
+
+    async def _process_buy_queue(self):
+        """
+        Process queued buy opportunities from monitoring system.
+
+        This method:
+        1. Loads all queued opportunities from buy_queue.json
+        2. Re-validates each opportunity (score check, signal check)
+        3. Executes still-valid buy orders
+        4. Clears the queue
+        """
+        try:
+            from core.buy_queue_manager import BuyQueueManager
+
+            buy_queue = BuyQueueManager()
+            queued_opportunities = buy_queue.dequeue_all()
+
+            if not queued_opportunities:
+                logger.info("📋 No opportunities in buy queue")
+                return
+
+            logger.info(f"📋 Processing {len(queued_opportunities)} queued buy opportunities")
+
+            # Get fresh analysis for all queued symbols
+            symbols = [opp['symbol'] for opp in queued_opportunities]
+            current_analyses = await self._get_current_analyses(symbols)
+
+            # Validate and filter opportunities
+            valid_opportunities = buy_queue.validate_and_filter(
+                queued_opportunities,
+                current_analyses
+            )
+
+            if not valid_opportunities:
+                logger.info("✅ No valid opportunities after re-validation")
+                return
+
+            logger.info(f"✅ {len(valid_opportunities)} opportunities validated, executing buys...")
+
+            # Execute valid buys
+            for opp in valid_opportunities:
+                try:
+                    await self._execute_queued_buy(opp, current_analyses)
+                except Exception as e:
+                    logger.error(f"Error executing buy for {opp['symbol']}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing buy queue: {e}", exc_info=True)
+
+    async def _get_current_analyses(self, symbols: List[str]) -> Dict[str, Dict]:
+        """
+        Get current analysis for multiple symbols.
+
+        Args:
+            symbols: List of symbols to analyze
+
+        Returns:
+            Dict mapping symbol -> analysis result
+        """
+        analyses = {}
+
+        for symbol in symbols:
+            try:
+                response = await asyncio.to_thread(
+                    requests.get,
+                    f"{self.base_url}/analyze/{symbol}",
+                    timeout=30
+                )
+
+                if response.status_code == 200:
+                    analyses[symbol] = response.json()
+                else:
+                    logger.warning(f"Could not get analysis for {symbol}: {response.status_code}")
+
+            except Exception as e:
+                logger.error(f"Error analyzing {symbol}: {e}")
+
+        return analyses
+
+    async def _execute_queued_buy(self, opportunity: Dict, current_analyses: Dict):
+        """
+        Execute a single queued buy opportunity.
+
+        Args:
+            opportunity: Opportunity dict from queue
+            current_analyses: Current analysis results
+        """
+        symbol = opportunity['symbol']
+        queued_signal = opportunity['signal']
+        queued_score = opportunity['score']
+
+        # Get current analysis
+        analysis = current_analyses.get(symbol)
+        if not analysis:
+            logger.warning(f"No current analysis for {symbol}, skipping")
+            return
+
+        current_price = analysis.get('market_data', {}).get('current_price')
+        current_score = analysis.get('overall_score', 0)
+        current_signal = analysis.get('recommendation', 'HOLD')
+
+        if not current_price or current_price <= 0:
+            logger.error(f"Invalid price for {symbol}: {current_price}")
+            return
+
+        # Execute buy via API
+        try:
+            from core.paper_portfolio_manager import PaperPortfolioManager
+            portfolio_manager = PaperPortfolioManager()
+
+            # Calculate position size
+            portfolio_value = portfolio_manager.get_portfolio_value()
+            position_size = self._calculate_position_size(current_score, portfolio_value, current_price)
+
+            if position_size is None or position_size <= 0:
+                logger.warning(f"Invalid position size for {symbol}: ${position_size}")
+                return
+
+            shares = int(position_size / current_price)
+
+            if shares <= 0:
+                logger.warning(f"Calculated 0 shares for {symbol} - position too small")
+                return
+
+            total_cost = shares * current_price
+
+            if total_cost > portfolio_manager.cash:
+                logger.warning(
+                    f"Insufficient cash for {symbol}: need ${total_cost:.2f}, have ${portfolio_manager.cash:.2f}"
+                )
+                return
+
+            # Execute buy
+            result = portfolio_manager.buy(symbol, shares, current_price)
+
+            if result['success']:
+                logger.info(
+                    f"🟢 QUEUED BUY EXECUTED: {symbol} "
+                    f"{queued_signal} (queued) → {current_signal} (current) "
+                    f"| {shares} shares @ ${current_price:.2f} "
+                    f"| Total: ${total_cost:.2f} | Score: {queued_score:.1f}→{current_score:.1f}"
+                )
+            else:
+                logger.error(f"Failed to buy {symbol}: {result['message']}")
+
+        except Exception as e:
+            logger.error(f"Error executing buy for {symbol}: {e}", exc_info=True)
+
+    def _calculate_position_size(self, score: float, portfolio_value: float, price: float) -> Optional[float]:
+        """
+        Calculate position size using score-weighted allocation.
+
+        Higher scores get larger allocations:
+        - Score 70: ~5% of portfolio
+        - Score 80: ~8% of portfolio
+        - Score 90: ~13% of portfolio
+        """
+        try:
+            # Normalize score to 0-1 range (70-100 → 0-1)
+            normalized_score = (score - 70) / 30
+            normalized_score = max(0, min(1, normalized_score))
+
+            # Exponential multiplier (0.5x to 1.5x)
+            multiplier = 0.5 + (normalized_score ** 1.5)
+
+            # Base allocation (10% of portfolio / 10 positions = 1% base)
+            base_allocation = portfolio_value * 0.05
+
+            # Apply multiplier
+            position_size = base_allocation * multiplier
+
+            # Respect max limits (15% of portfolio)
+            max_position = portfolio_value * 0.15
+            position_size = min(position_size, max_position)
+
+            return position_size
+
+        except Exception as e:
+            logger.error(f"Error calculating position size: {e}")
+            return None
 
     def start(self):
         """
