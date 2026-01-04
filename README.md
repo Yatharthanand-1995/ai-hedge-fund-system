@@ -28,7 +28,7 @@ The system generates comprehensive investment narratives that include:
 
 A live demonstration of the **Stock Analysis** feature is deployed on Vercel:
 
-**[View Live Demo](https://your-vercel-url.vercel.app)** *(URL will be updated after deployment)*
+**[View Live Demo](https://ai-hedge-fund-stock-analysis-demo-iz5povweo.vercel.app)** 🚀
 
 ### Demo Features
 - 📊 Real-time analysis of 50 elite S&P 100 stocks
