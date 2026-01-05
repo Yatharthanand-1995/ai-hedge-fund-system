@@ -23,6 +23,9 @@ RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz && \
 # Copy requirements
 COPY requirements_minimal.txt .
 
+# Upgrade pip and install build tools first
+RUN pip install --upgrade pip setuptools wheel
+
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements_minimal.txt
 
