@@ -6,7 +6,15 @@ Comprehensive stock data collection with technical indicators
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import talib
+try:
+    import talib
+    HAS_TALIB = True
+except ImportError:
+    HAS_TALIB = False
+    try:
+        import pandas_ta as ta
+    except ImportError:
+        ta = None
 from typing import Dict, List, Optional, Callable, Any
 import logging
 from datetime import datetime, timedelta
