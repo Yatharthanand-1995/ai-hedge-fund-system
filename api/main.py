@@ -40,6 +40,40 @@ from cachetools import TTLCache
 from dotenv import load_dotenv
 load_dotenv()  # Load .env file from project root
 
+# AWS Secrets Manager integration - gracefully degrades if not available
+def get_secret(secret_name: str, region_name: str = 'us-east-1') -> Optional[str]:
+    """
+    Fetch secret from AWS Secrets Manager.
+    Falls back to environment variables if AWS SDK is not available or secret not found.
+
+    Args:
+        secret_name: Full secret name (e.g., 'hedgefund/production/gemini-api-key')
+        region_name: AWS region (default: us-east-1)
+
+    Returns:
+        Secret value as string, or None if not found
+    """
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        client = boto3.client('secretsmanager', region_name=region_name)
+        response = client.get_secret_value(SecretId=secret_name)
+        return response['SecretString']
+    except ImportError:
+        # boto3 not installed - graceful degradation
+        return None
+    except ClientError as e:
+        # Secret not found or access denied - graceful degradation
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            pass  # Secret doesn't exist yet
+        elif e.response['Error']['Code'] == 'AccessDeniedException':
+            pass  # No permission to access secret
+        return None
+    except Exception:
+        # Any other error - graceful degradation
+        return None
+
 # Optional Sentry error tracking - gracefully degrades if not configured
 try:
     import sentry_sdk

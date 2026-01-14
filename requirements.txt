@@ -95,3 +95,6 @@ sqlalchemy>=2.0.0  # ORM
 
 # Async support
 aioredis>=2.0.0  # Async Redis client
+
+# AWS SDK for cloud deployment
+boto3>=1.34.0  # AWS SDK for Secrets Manager and other services
