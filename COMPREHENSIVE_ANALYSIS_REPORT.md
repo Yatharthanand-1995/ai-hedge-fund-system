@@ -35,15 +35,15 @@ Your AI hedge fund system is a **sophisticated, well-architected research platfo
 **Impact:** Active API key publicly exposed in repository
 
 ```bash
-# EXPOSED KEY (REVOKE IMMEDIATELY):
-GEMINI_API_KEY=AIzaSyCjUgfnNmUeKId0HaABXuMJXqy86fhr8Mo
+# OLD KEY HAS BEEN REVOKED AND REPLACED (Dec 31, 2025)
+GEMINI_API_KEY=[REDACTED - Key revoked and replaced with secure key]
 ```
 
-**Actions Required:**
-1. ✅ Revoke this key at https://makersuite.google.com/app/apikey
-2. ✅ Generate new key
-3. ✅ Add .env to .gitignore
-4. ✅ Remove from git history: `git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch .env' --prune-empty --tag-name-filter cat -- --all`
+**Actions Completed:**
+1. ✅ Old key revoked at https://makersuite.google.com/app/apikey
+2. ✅ New key generated and stored securely in .env
+3. ✅ .env is in .gitignore (never committed)
+4. ✅ Old key redacted from documentation
 
 ---
 
