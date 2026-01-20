@@ -2614,6 +2614,48 @@ async def get_auto_buy_alerts(limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/portfolio/paper/auto-buy/queue", tags=["Paper Trading - Automation"])
+async def get_buy_queue_status():
+    """
+    Get queued buy opportunities awaiting batch execution.
+
+    The system uses batch execution at 4 PM ET (market close) for optimal pricing.
+    This endpoint returns all opportunities currently queued for the next batch.
+
+    Returns:
+        - queued_buys: List of opportunities with scores, signals, and queue time
+        - count: Number of opportunities queued
+        - next_execution: Next scheduled batch execution time
+        - batch_mode_enabled: Whether batch execution is active
+    """
+    try:
+        from core.buy_queue_manager import BuyQueueManager
+        from core.auto_buy_monitor import AutoBuyMonitor
+
+        queue_manager = BuyQueueManager()
+        monitor = AutoBuyMonitor()
+
+        # Get queued opportunities (peek without removing)
+        queued_opportunities = queue_manager.peek()
+
+        # Get auto-buy rules to check if batch mode is enabled
+        rules = monitor.get_rules()
+        batch_mode = rules.get('batch_mode_enabled', True)
+
+        return {
+            "success": True,
+            "queued_buys": queued_opportunities,
+            "count": len(queued_opportunities),
+            "next_execution": "4:00 PM ET (Market Close)" if batch_mode else "Immediate",
+            "batch_mode_enabled": batch_mode,
+            "queue_file": "data/buy_queue.json"
+        }
+
+    except Exception as e:
+        logger.error(f"Get buy queue status error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # Auto-Sell Monitoring Endpoints
 # ============================================================================
