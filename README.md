@@ -1,4 +1,4 @@
-# 🏦 4-Agent AI Hedge Fund System
+# 🏦 5-Agent AI Hedge Fund System
 
 **Professional-grade investment analysis platform with multi-agent intelligence and narrative generation**
 
@@ -6,14 +6,15 @@
 
 This is a sophisticated AI-powered hedge fund analysis system that employs **5 specialized agents** to provide comprehensive investment analysis with human-readable narratives. The system combines quantitative analysis with qualitative reasoning to generate professional investment theses.
 
-### 🤖 4-Agent Analysis Framework
+### 🤖 5-Agent Analysis Framework
 
 | Agent | Weight | Focus Area | Key Metrics |
 |-------|--------|------------|-------------|
-| **Fundamentals Agent** | 40% | Financial health, profitability, growth, valuation | ROE, P/E, Revenue Growth, Debt-to-Equity |
-| **Momentum Agent** | 30% | Technical analysis and price trends | RSI, Moving Averages, Price Momentum |
-| **Quality Agent** | 20% | Business characteristics and operational efficiency | Business Model Quality, Operational Metrics |
-| **Sentiment Agent** | 10% | Market sentiment and analyst outlook | News Sentiment, Analyst Ratings |
+| **Fundamentals Agent** | 36% | Financial health, profitability, growth, valuation | ROE, P/E, Revenue Growth, Debt-to-Equity |
+| **Momentum Agent** | 27% | Technical analysis and price trends | RSI, Moving Averages, Price Momentum |
+| **Quality Agent** | 18% | Business characteristics and operational efficiency | Business Model Quality, Operational Metrics |
+| **Sentiment Agent** | 9% | Market sentiment and analyst outlook | News Sentiment, Analyst Ratings |
+| **Institutional Flow Agent** | 10% | "Smart money" tracking and institutional activity | OBV, MFI, Volume Trends, VWAP Position |
 
 ### 💡 Investment Narrative Engine
 
@@ -94,11 +95,12 @@ python -m api.main
 
 ```
 ai_hedge_fund_system/
-├── agents/                    # 4 Specialized Agents
-│   ├── fundamentals_agent.py  # Financial analysis (40% weight)
-│   ├── momentum_agent.py      # Technical analysis (30% weight)
-│   ├── quality_agent.py       # Business quality (20% weight)
-│   └── sentiment_agent.py     # Market sentiment (10% weight)
+├── agents/                    # 5 Specialized Agents
+│   ├── fundamentals_agent.py  # Financial analysis (36% weight)
+│   ├── momentum_agent.py      # Technical analysis (27% weight)
+│   ├── quality_agent.py       # Business quality (18% weight)
+│   ├── sentiment_agent.py     # Market sentiment (9% weight)
+│   └── institutional_flow_agent.py  # Smart money tracking (10% weight)
 ├── narrative_engine/          # Investment Thesis Generation
 │   └── narrative_engine.py    # Converts analysis to human narrative
 ├── api/                       # Web API Interface
@@ -246,13 +248,29 @@ The system tracks comprehensive performance metrics:
 - Social media sentiment integration
 - Analyst rating aggregation
 
+### Automated Trading & Buy Queue System
+- **Batch Execution Strategy**: Auto-buy opportunities are queued during market hours and executed at 4 PM ET (market close) for optimal pricing
+- **Buy Queue Manager**: Thread-safe and process-safe queue management with file locking
+- **Smart Validation**: Opportunities are re-validated at execution time to prevent stale trades
+- **Risk Management**: Automatic sector diversification and position sizing based on scores
+- **Visibility**: Real-time queue status available via API endpoint `/portfolio/paper/auto-buy/queue`
+
+**Why Batch Execution?**
+- Better pricing through market close execution
+- Reduced slippage compared to immediate execution
+- Allows for re-validation of signals before trading
+- More efficient capital allocation across multiple opportunities
+
 ## 📝 Development
 
 ### Running Tests
 
 ```bash
-python test_system.py  # Test all 4 agents and narrative generation
-python -m pytest tests/  # Run unit tests (if available)
+python test_system.py  # Test all 5 agents and narrative generation
+python -m pytest tests/  # Run organized test suite
+pytest tests/unit -v  # Run unit tests only
+pytest tests/integration -v  # Run integration tests
+pytest tests/system -v  # Run system tests
 ```
 
 ### Code Quality
@@ -265,20 +283,37 @@ flake8 . # Linting
 
 ## 📦 Dependencies
 
-Key dependencies include:
+### Core Dependencies (requirements.txt)
 - **FastAPI** - Web API framework
 - **yfinance** - Financial data provider
 - **pandas/numpy** - Data processing
 - **scikit-learn** - Machine learning
 - **talib** - Technical analysis indicators
+- **LLM providers** - OpenAI, Anthropic, or Google Gemini (optional)
 
-See `requirements.txt` for complete dependency list.
+### Optional Dependencies (requirements-optional.txt)
+Heavy dependencies for advanced features (~1GB):
+- **PyTorch** - Advanced ML models
+- **Redis** - Distributed caching
+- **PostgreSQL** - Database support
+- **MLflow/TensorBoard** - ML experiment tracking
+
+**Installation:**
+```bash
+# Core system (required)
+pip install -r requirements.txt
+
+# Optional features (as needed)
+pip install -r requirements-optional.txt
+```
 
 ## 🤝 Contributing
 
-1. Ensure all 4 agents are working correctly
+1. Ensure all 5 agents are working correctly
 2. Test narrative generation thoroughly
-3. Maintain the weighted scoring system (40/30/20/10)
+3. Maintain the weighted scoring system (36/27/18/9/10)
+4. Follow the organized test structure in `/tests/`
+5. Update documentation for any new features
 4. Follow the existing code structure and patterns
 
 ## 📄 License
