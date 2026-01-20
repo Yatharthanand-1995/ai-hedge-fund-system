@@ -2458,10 +2458,11 @@ async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
     """
     Scan market for auto-buy opportunities.
 
-    Analyzes top stocks from the universe and identifies buy opportunities
-    based on auto-buy rules (score, recommendation, confidence).
+    Behavior depends on execution_mode in auto_buy_config.json:
+    - 'immediate': Executes buys immediately and returns results
+    - 'batch_4pm': Queues opportunities for 4 PM batch execution
 
-    Does NOT execute buys - just returns recommendations.
+    Returns identified opportunities and execution status.
     """
     try:
         from core.auto_buy_monitor import AutoBuyMonitor
@@ -2497,10 +2498,58 @@ async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
             portfolio_positions=portfolio_with_prices.get('positions', {})
         )
 
+        # Check execution mode
+        execution_mode = monitor.execution_mode
+        executed_buys = []
+
+        if execution_mode == 'immediate' and opportunities:
+            # Execute immediately in immediate mode
+            logger.info(f"🚀 Immediate execution mode: executing {len(opportunities)} opportunities now")
+
+            for opp in opportunities:
+                try:
+                    symbol = opp['symbol']
+                    shares = opp['shares']
+
+                    # Execute buy
+                    result = paper_portfolio.buy(symbol, shares)
+
+                    executed_buys.append({
+                        'symbol': symbol,
+                        'shares': shares,
+                        'price': result.get('price', 0),
+                        'total_cost': result.get('total_cost', 0),
+                        'score': opp['score'],
+                        'recommendation': opp['recommendation']
+                    })
+
+                    logger.info(f"✅ Bought {shares} shares of {symbol} @ ${result.get('price', 0):.2f}")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to buy {opp['symbol']}: {e}")
+
+        elif execution_mode == 'batch_4pm' and opportunities:
+            # Queue for 4 PM batch execution
+            logger.info(f"📋 Batch mode: queuing {len(opportunities)} opportunities for 4 PM execution")
+            from core.buy_queue_manager import BuyQueueManager
+            queue_manager = BuyQueueManager()
+
+            for opp in opportunities:
+                queue_manager.enqueue(
+                    symbol=opp['symbol'],
+                    score=opp['score'],
+                    signal=opp['recommendation'],
+                    price=opp.get('current_price'),
+                    reason=f"Auto-buy: {opp['reason']}"
+                )
+
         return {
             "success": True,
+            "execution_mode": execution_mode,
             "opportunities": opportunities,
             "count": len(opportunities),
+            "executed_buys": executed_buys,
+            "executed_count": len(executed_buys),
             "analyzed": len(analyses),
             "rules": monitor.get_rules(),
             "portfolio_state": {
@@ -2638,15 +2687,17 @@ async def get_buy_queue_status():
         # Get queued opportunities (peek without removing)
         queued_opportunities = queue_manager.peek()
 
-        # Get auto-buy rules to check if batch mode is enabled
+        # Get auto-buy rules to check execution mode
         rules = monitor.get_rules()
-        batch_mode = rules.get('batch_mode_enabled', True)
+        execution_mode = rules.get('execution_mode', 'immediate')
+        batch_mode = execution_mode == 'batch_4pm'
 
         return {
             "success": True,
+            "execution_mode": execution_mode,
             "queued_buys": queued_opportunities,
             "count": len(queued_opportunities),
-            "next_execution": "4:00 PM ET (Market Close)" if batch_mode else "Immediate",
+            "next_execution": "4:00 PM ET (Market Close)" if batch_mode else "Immediate (on signal detection)",
             "batch_mode_enabled": batch_mode,
             "queue_file": "data/buy_queue.json"
         }

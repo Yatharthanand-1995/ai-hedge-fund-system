@@ -13,6 +13,7 @@ interface QueuedBuy {
 
 interface BuyQueueStatus {
   success: boolean;
+  execution_mode: string;
   queued_buys: QueuedBuy[];
   count: number;
   next_execution: string;
@@ -135,28 +136,60 @@ export const AutoBuyStatusPanel: React.FC<AutoBuyStatusPanelProps> = ({ classNam
         )}
       </div>
 
-      {/* Batch Execution Info */}
-      {queueStatus?.batch_mode_enabled && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center space-x-2 text-blue-900">
-            <Calendar className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              Next Execution: {queueStatus.next_execution}
-            </span>
-          </div>
-          <p className="text-xs text-blue-700 mt-1 ml-6">
-            Batch execution optimizes pricing and reduces slippage
-          </p>
+      {/* Execution Mode Info */}
+      <div className={`mb-4 p-3 border rounded-lg ${
+        queueStatus?.execution_mode === 'immediate'
+          ? 'bg-green-50 border-green-200'
+          : 'bg-blue-50 border-blue-200'
+      }`}>
+        <div className={`flex items-center space-x-2 ${
+          queueStatus?.execution_mode === 'immediate'
+            ? 'text-green-900'
+            : 'text-blue-900'
+        }`}>
+          {queueStatus?.execution_mode === 'immediate' ? (
+            <>
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                Immediate Execution Mode
+              </span>
+            </>
+          ) : (
+            <>
+              <Calendar className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                Next Execution: {queueStatus?.next_execution}
+              </span>
+            </>
+          )}
         </div>
-      )}
+        <p className={`text-xs mt-1 ml-6 ${
+          queueStatus?.execution_mode === 'immediate'
+            ? 'text-green-700'
+            : 'text-blue-700'
+        }`}>
+          {queueStatus?.execution_mode === 'immediate'
+            ? 'Buys execute immediately when STRONG BUY signals are detected'
+            : 'Batch execution at market close for optimal pricing and final review'
+          }
+        </p>
+      </div>
 
       {/* Queue Status */}
       {!hasQueuedBuys ? (
         <div className="text-center py-8">
           <CheckCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No pending buy opportunities</p>
+          <p className="text-gray-500 font-medium">
+            {queueStatus?.execution_mode === 'immediate'
+              ? 'No recent buy executions'
+              : 'No pending buy opportunities'
+            }
+          </p>
           <p className="text-sm text-gray-400 mt-1">
-            System will queue STRONG BUY signals here for batch execution
+            {queueStatus?.execution_mode === 'immediate'
+              ? 'STRONG BUY signals execute immediately when detected'
+              : 'System will queue STRONG BUY signals here for batch execution'
+            }
           </p>
         </div>
       ) : (
