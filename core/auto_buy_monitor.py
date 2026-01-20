@@ -27,6 +27,7 @@ _auto_buy_lock = threading.RLock()
 class AutoBuyRule:
     """Configuration for auto-buy rules."""
     enabled: bool = False
+    execution_mode: str = "immediate"  # "immediate" or "batch_4pm"
     min_score_threshold: float = 75.0  # Only buy if score >= 75
     max_position_size_percent: float = 15.0  # Max 15% of portfolio per position
     max_positions: int = 10  # Maximum number of positions
@@ -81,6 +82,7 @@ class AutoBuyMonitor:
         """Save auto-buy configuration."""
         data = {
             'enabled': rules.enabled,
+            'execution_mode': rules.execution_mode,
             'min_score_threshold': rules.min_score_threshold,
             'max_position_size_percent': rules.max_position_size_percent,
             'max_positions': rules.max_positions,
@@ -158,6 +160,7 @@ class AutoBuyMonitor:
         """Get current auto-buy rules."""
         return {
             'enabled': self.rules.enabled,
+            'execution_mode': self.rules.execution_mode,
             'min_score_threshold': self.rules.min_score_threshold,
             'max_position_size_percent': self.rules.max_position_size_percent,
             'max_positions': self.rules.max_positions,
