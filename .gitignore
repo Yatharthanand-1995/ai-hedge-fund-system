@@ -147,6 +147,12 @@ data/temp/
 logs/
 *.log
 
+# Runtime files
+nohup*.out
+data/paper_portfolio.lock
+data/runtime/
+data_backup_*/
+
 # Temporary files
 temp/
 tmp/
