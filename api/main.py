@@ -1208,6 +1208,10 @@ async def get_top_picks(limit: int = 12):
             narrative = analysis["narrative"]
             market_data = analysis["market_data"]
 
+            # Add alias for frontend compatibility (change_percent = price_change_percent)
+            if "price_change_percent" in market_data and "change_percent" not in market_data:
+                market_data["change_percent"] = market_data["price_change_percent"]
+
             # Get sector information
             sector = "Unknown"
             for sector_name, symbols in SECTOR_MAPPING.items():
