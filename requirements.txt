@@ -68,33 +68,20 @@ concurrent-futures>=3.1.1  # For Python < 3.2, usually built-in
 # Configuration management
 pyyaml>=6.0
 
-# Enhanced AI/ML Components for Production Hedge Fund System
-redis>=4.5.0  # Caching and real-time data
-websockets>=11.0.0  # Real-time streaming
-prometheus-client>=0.19.0  # Monitoring
-slowapi>=0.1.9  # Rate limiting for FastAPI
-sentry-sdk[fastapi]>=2.0.0  # Error tracking and monitoring
+# AI/LLM providers for sentiment analysis (optional - gracefully degrades if not available)
+openai>=1.0.0  # GPT-based sentiment analysis
+anthropic>=0.8.0  # Claude API alternative for sentiment
+google-generativeai>=0.8.0  # Google Gemini API (default LLM provider)
 
-# Advanced AI/ML for sentiment and regime detection
-hmmlearn>=0.3.0  # Hidden Markov Models for regime detection
-openai>=1.0.0  # GPT-based sentiment analysis (optional)
-anthropic>=0.8.0  # Claude API alternative for sentiment (optional)
-torch>=2.0.0  # PyTorch for advanced ML models (optional)
-tensorboard>=2.14.0  # Model monitoring (optional)
-mlflow>=2.8.0  # Model versioning and tracking (optional)
-
-# News and sentiment data sources
-newsapi-python>=0.2.7  # News API for sentiment (optional)
-praw>=7.7.0  # Reddit API for social sentiment (optional)
+# Web scraping for news sentiment
 beautifulsoup4>=4.12.0  # Web scraping for news
 lxml>=4.9.0  # XML parsing for feeds
 
-# Database support (optional)
-psycopg2-binary>=2.9.0  # PostgreSQL
-sqlalchemy>=2.0.0  # ORM
+# Error tracking and monitoring
+sentry-sdk[fastapi]>=2.0.0  # Error tracking and monitoring
 
-# Async support
-aioredis>=2.0.0  # Async Redis client
+# Note: For additional features (Redis caching, Prometheus metrics, ML models),
+# see requirements-optional.txt
 
 # AWS SDK for cloud deployment
 boto3>=1.34.0  # AWS SDK for Secrets Manager and other services
