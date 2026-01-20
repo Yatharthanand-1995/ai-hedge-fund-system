@@ -230,12 +230,21 @@ The system exposes a FastAPI server on port 8010:
 - **POST /portfolio/paper/auto-buy/scan** - Scan market for auto-buy opportunities
 - **POST /portfolio/paper/auto-buy/execute** - Execute queued auto-buys
 
-**Batch Execution Strategy:**
-The system queues STRONG BUY signals during market hours and executes them at 4 PM ET (market close). This approach:
-- Optimizes pricing through market close execution
-- Reduces slippage vs immediate execution
-- Re-validates signals before trading to prevent stale trades
-- Enables better capital allocation across multiple opportunities
+**Execution Modes:**
+The system supports two execution strategies (configured via `execution_mode` in `data/auto_buy_config.json`):
+
+1. **Immediate Execution** (default - recommended for paper trading):
+   - Executes buys immediately when STRONG BUY signals are detected
+   - Captures opportunities in real-time without delay
+   - Provides immediate feedback on signal quality
+   - Best for paper trading and educational purposes
+
+2. **Batch Execution at 4 PM** (optional - for real capital):
+   - Queues STRONG BUY signals during market hours
+   - Executes all queued trades at 4 PM ET (market close)
+   - Allows final human review before committing real capital
+   - Optimizes pricing through market close execution
+   - Re-validates signals before trading to prevent stale trades
 
 **Buy Queue Manager** (`core/buy_queue_manager.py`):
 - Thread-safe and process-safe with fcntl file locking

@@ -248,18 +248,22 @@ The system tracks comprehensive performance metrics:
 - Social media sentiment integration
 - Analyst rating aggregation
 
-### Automated Trading & Buy Queue System
-- **Batch Execution Strategy**: Auto-buy opportunities are queued during market hours and executed at 4 PM ET (market close) for optimal pricing
-- **Buy Queue Manager**: Thread-safe and process-safe queue management with file locking
-- **Smart Validation**: Opportunities are re-validated at execution time to prevent stale trades
+### Automated Trading System
+- **Immediate Execution (Default)**: Auto-buy executes immediately when STRONG BUY signals are detected
+- **Batch Execution (Optional)**: Queue opportunities for 4 PM ET market close execution (for real capital)
+- **Smart Validation**: Opportunities are validated before execution to ensure signal quality
 - **Risk Management**: Automatic sector diversification and position sizing based on scores
-- **Visibility**: Real-time queue status available via API endpoint `/portfolio/paper/auto-buy/queue`
+- **Visibility**: Real-time status available via API endpoint `/portfolio/paper/auto-buy/queue`
 
-**Why Batch Execution?**
-- Better pricing through market close execution
-- Reduced slippage compared to immediate execution
-- Allows for re-validation of signals before trading
-- More efficient capital allocation across multiple opportunities
+**Execution Modes** (configurable in `data/auto_buy_config.json`):
+- **`immediate`** (default): Execute immediately on signal detection
+  - Best for paper trading and learning
+  - Captures opportunities in real-time
+  - No missed gains from waiting
+- **`batch_4pm`**: Queue for 4 PM batch execution
+  - Best for real capital with final human review
+  - Market close pricing for predictable fills
+  - Aggregate order optimization
 
 ## 📝 Development
 
