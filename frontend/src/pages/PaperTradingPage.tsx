@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, RefreshCw, Trash2, Clock, Sparkles, BarChart3
 import { cn, formatCurrency } from '../utils';
 import { useToast } from '../components/common/Toast';
 import { AutoSellSettings } from '../components/AutoSellSettings';
+import { AutoBuyStatusPanel } from '../components/dashboard/AutoBuyStatusPanel';
 
 interface PaperPortfolio {
   cash: number;
@@ -298,6 +299,9 @@ export const PaperTradingPage: React.FC = () => {
       {showAutoSellSettings && (
         <AutoSellSettings onClose={() => setShowAutoSellSettings(false)} />
       )}
+
+      {/* Auto-Buy Queue Status */}
+      <AutoBuyStatusPanel className="mb-6" />
 
       {/* Portfolio Summary */}
       <div className="professional-card p-6">
