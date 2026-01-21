@@ -2503,7 +2503,7 @@ async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
         )
 
         # Check execution mode
-        execution_mode = monitor.execution_mode
+        execution_mode = monitor.rules.execution_mode
         executed_buys = []
 
         if execution_mode == 'immediate' and opportunities:

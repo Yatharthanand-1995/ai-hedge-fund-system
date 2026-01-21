@@ -130,6 +130,13 @@ print(f"Success: {result['success']}")
 **Workaround:** System still works, just with simpler sentiment
 **Fix Needed:** Update Gemini API model name or version
 
+### 4. Auto-Buy Scan AttributeError (FIXED ✅)
+**Issue:** `'AutoBuyMonitor' object has no attribute 'execution_mode'`
+**Impact:** Auto-buy scan endpoint returned 500 error, preventing any scans
+**Root Cause:** API code accessed `monitor.execution_mode` directly instead of `monitor.rules.execution_mode`
+**Fix Applied:** Changed line 2506 in `api/main.py` to access execution_mode through rules object
+**Status:** RESOLVED - scan now works correctly
+
 ## Commits Made
 
 ```
@@ -137,6 +144,7 @@ print(f"Success: {result['success']}")
 5516868 fix: add execution_mode field to AutoBuyRule dataclass
 e15ab6c docs: update auto-buy documentation and add comprehensive execution mode guide
 2f67883 feat: add immediate execution mode for auto-buy (default for paper trading)
+[PENDING] fix: correct execution_mode access path in auto-buy scan endpoint
 ```
 
 ## Files Modified
