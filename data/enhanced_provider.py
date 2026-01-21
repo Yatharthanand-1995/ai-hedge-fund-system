@@ -270,6 +270,26 @@ class EnhancedYahooProvider:
                 f"quarterly financials for {symbol}"
             )
 
+            # Validate data completeness and log warnings
+            data_completeness = {
+                'has_financials': financials is not None and not financials.empty,
+                'has_quarterly': quarterly_financials is not None and not quarterly_financials.empty,
+                'has_info': info is not None and len(info) > 0,
+                'has_historical': hist is not None and not hist.empty
+            }
+
+            # Log warnings for missing data
+            if not data_completeness['has_financials']:
+                logger.warning(f"Empty financials returned for {symbol}")
+            if not data_completeness['has_quarterly']:
+                logger.warning(f"Empty quarterly financials returned for {symbol}")
+
+            # Log summary of data quality
+            available_count = sum(data_completeness.values())
+            total_count = len(data_completeness)
+            if available_count < total_count:
+                logger.info(f"Data completeness for {symbol}: {available_count}/{total_count} data sources available")
+
             # Combine all data
             comprehensive_data = {
                 **current_data,
@@ -284,7 +304,8 @@ class EnhancedYahooProvider:
                 'technical_data': technical_data,  # Also include as separate key for institutional flow agent
                 'info': info,  # Full company info for Quality Agent
                 'financials': financials,  # Financial statements for Quality Agent
-                'quarterly_financials': quarterly_financials  # Quarterly financials for Quality Agent
+                'quarterly_financials': quarterly_financials,  # Quarterly financials for Quality Agent
+                'data_completeness': data_completeness  # Data quality metadata for agents
             }
 
             # Cache the data
