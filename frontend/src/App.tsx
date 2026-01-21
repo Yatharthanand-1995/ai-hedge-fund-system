@@ -368,8 +368,15 @@ const Dashboard: React.FC<{ onPageChange: (page: 'dashboard' | 'analysis' | 'por
 // Main App Component
 function App() {
   console.log('🎯 App component rendering...');
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts'>('dashboard');
+
+  // Demo mode configuration for Vercel deployment
+  const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts'>(
+    DEMO_MODE ? 'analysis' : 'dashboard'
+  );
   console.log('📄 Current page:', currentPage);
+  console.log('🎬 Demo mode:', DEMO_MODE);
 
   return (
     <ErrorBoundary componentName="Application Root">
@@ -378,7 +385,7 @@ function App() {
           <div className="min-h-screen bg-background flex justify-center">
             <div className="w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6">
               <ErrorBoundary componentName="Navigation">
-                <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+                <Navigation currentPage={currentPage} onPageChange={setCurrentPage} demoMode={DEMO_MODE} />
               </ErrorBoundary>
               {currentPage === 'dashboard' && (
                 <ErrorBoundary componentName="Dashboard Page">

@@ -97,14 +97,22 @@ class QualityAgent:
                 'reasoning': reasoning
             }
 
+        except KeyError as e:
+            # Specific metric missing - try partial analysis
+            logger.warning(f"Quality analysis missing metric for {symbol}: {e}")
+            return self._partial_analysis_fallback(symbol, cached_data, str(e))
+        except ValueError as e:
+            # Calculation error - try partial analysis
+            logger.warning(f"Quality analysis calculation error for {symbol}: {e}")
+            return self._partial_analysis_fallback(symbol, cached_data, str(e))
+        except AttributeError as e:
+            # Empty DataFrame or missing attribute - try partial analysis
+            logger.warning(f"Quality analysis data structure error for {symbol}: {e}")
+            return self._partial_analysis_fallback(symbol, cached_data, str(e))
         except Exception as e:
-            logger.error(f"Quality analysis failed for {symbol}: {e}")
-            return {
-                'score': 50.0,
-                'confidence': 0.0,
-                'metrics': {},
-                'reasoning': f"Analysis failed: {str(e)}"
-            }
+            # Unknown error - try partial analysis as last resort
+            logger.error(f"Quality analysis unexpected error for {symbol}: {e}")
+            return self._partial_analysis_fallback(symbol, cached_data, str(e))
 
     def _score_market_position(self, info: Dict, symbol: str) -> float:
         """Score based on market cap and sector position (0-100)"""
@@ -267,7 +275,9 @@ class QualityAgent:
             available_points += 1
         data_points += 1
 
-        return available_points / data_points if data_points > 0 else 0.5
+        confidence = available_points / data_points if data_points > 0 else 0.5
+        # Ensure absolute minimum confidence of 25%
+        return max(confidence, 0.25)
 
     def _get_sector(self, symbol: str) -> str:
         """Get sector for symbol from mapping"""
@@ -275,6 +285,73 @@ class QualityAgent:
             if symbol in symbols:
                 return sector
         return 'Unknown'
+
+    def _partial_analysis_fallback(self, symbol: str, cached_data: Optional[Dict], error_msg: str) -> Dict:
+        """
+        Provide partial analysis when full analysis fails
+        Returns partial results with reduced confidence instead of total failure
+        """
+        partial_confidence = 0.0
+        partial_score = 50.0  # Start with neutral
+        partial_metrics = {'partial_data': True, 'error': error_msg[:100]}
+
+        try:
+            # Try to get basic info
+            info = {}
+            financials = pd.DataFrame()
+
+            if cached_data:
+                info = cached_data.get('info', {})
+                financials = cached_data.get('financials', pd.DataFrame())
+            else:
+                try:
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info
+                except:
+                    pass
+
+            # Calculate partial confidence based on available data
+            if info and len(info) > 0:
+                partial_confidence += 0.3  # Basic info available
+                partial_metrics['has_info'] = True
+
+                # Try to extract basic market cap for score adjustment
+                market_cap = info.get('marketCap', 0)
+                if market_cap > 100e9:
+                    partial_score += 10  # Large cap bonus
+                    partial_metrics['market_cap'] = market_cap
+
+                # Check for basic profitability
+                profit_margin = info.get('profitMargins', 0)
+                if profit_margin and profit_margin > 0:
+                    partial_confidence += 0.2
+                    if profit_margin > 0.1:
+                        partial_score += 10
+                    partial_metrics['profit_margin'] = profit_margin * 100
+
+            if not financials.empty:
+                partial_confidence += 0.3  # Some financial data
+                partial_metrics['has_financials'] = True
+
+            # Ensure minimum confidence
+            partial_confidence = max(partial_confidence, 0.2)
+
+            return {
+                'score': round(partial_score, 2),
+                'confidence': round(partial_confidence, 2),
+                'metrics': partial_metrics,
+                'reasoning': f"Partial analysis (limited data): {error_msg[:80]}"
+            }
+
+        except Exception as fallback_error:
+            # Final fallback - minimum viable response
+            logger.error(f"Partial analysis also failed for {symbol}: {fallback_error}")
+            return {
+                'score': 50.0,
+                'confidence': 0.2,  # Minimum 20% instead of 0%
+                'metrics': {'total_failure': True},
+                'reasoning': f"Analysis severely limited: {str(fallback_error)[:80]}"
+            }
 
     def _build_reasoning(self, market: float, stability: float, moat: float, quality: float) -> str:
         """Build human-readable reasoning"""

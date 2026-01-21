@@ -16,7 +16,7 @@ import json
 import time
 import logging
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from contextlib import contextmanager
 
@@ -53,8 +53,8 @@ class BuyQueueManager:
         data = {
             "queued_opportunities": [],
             "metadata": {
-                "created_at": datetime.utcnow().isoformat() + "Z",
-                "last_modified": datetime.utcnow().isoformat() + "Z"
+                "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+                "last_modified": datetime.now(timezone.utc).isoformat() + "Z"
             }
         }
         self._atomic_write(data)
@@ -142,8 +142,8 @@ class BuyQueueManager:
             return {
                 "queued_opportunities": [],
                 "metadata": {
-                    "created_at": datetime.utcnow().isoformat() + "Z",
-                    "last_modified": datetime.utcnow().isoformat() + "Z"
+                    "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+                    "last_modified": datetime.now(timezone.utc).isoformat() + "Z"
                 }
             }
 
@@ -158,7 +158,7 @@ class BuyQueueManager:
         Returns:
             Filtered list without stale entries
         """
-        cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
         filtered = []
         stale_count = 0
 
@@ -211,7 +211,7 @@ class BuyQueueManager:
                 # Add new opportunity
                 opportunity = {
                     'symbol': symbol,
-                    'queued_at': datetime.utcnow().isoformat() + 'Z',
+                    'queued_at': datetime.now(timezone.utc).isoformat() + 'Z',
                     'signal': signal,
                     'score': score,
                     'price': price,
@@ -221,7 +221,7 @@ class BuyQueueManager:
 
                 # Update metadata
                 data['queued_opportunities'] = opportunities
-                data['metadata']['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+                data['metadata']['last_modified'] = datetime.now(timezone.utc).isoformat() + 'Z'
 
                 # Atomic write
                 self._atomic_write(data)
@@ -257,7 +257,7 @@ class BuyQueueManager:
 
                 # Clear queue
                 data['queued_opportunities'] = []
-                data['metadata']['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+                data['metadata']['last_modified'] = datetime.now(timezone.utc).isoformat() + 'Z'
 
                 # Atomic write
                 self._atomic_write(data)
@@ -364,7 +364,7 @@ class BuyQueueManager:
                 count = len(data.get('queued_opportunities', []))
 
                 data['queued_opportunities'] = []
-                data['metadata']['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+                data['metadata']['last_modified'] = datetime.now(timezone.utc).isoformat() + 'Z'
 
                 self._atomic_write(data)
 

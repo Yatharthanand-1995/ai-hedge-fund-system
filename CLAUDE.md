@@ -219,6 +219,39 @@ The system exposes a FastAPI server on port 8010:
   - Provides regime-adjusted agent weights
   - Cached for 6 hours, auto-refreshes
 
+### Paper Trading & Auto-Buy (NEW ✨)
+- **GET /portfolio/paper** - Get paper trading portfolio with live prices
+- **POST /portfolio/paper/buy** - Execute manual buy in paper portfolio
+- **POST /portfolio/paper/sell** - Execute manual sell in paper portfolio
+- **GET /portfolio/paper/auto-buy/queue** - Get queued buy opportunities
+  - Shows opportunities awaiting batch execution at 4 PM ET
+  - Includes symbol, score, signal, queue time, and reason
+  - Real-time status updates every 30 seconds in frontend
+- **POST /portfolio/paper/auto-buy/scan** - Scan market for auto-buy opportunities
+- **POST /portfolio/paper/auto-buy/execute** - Execute queued auto-buys
+
+**Execution Modes:**
+The system supports two execution strategies (configured via `execution_mode` in `data/auto_buy_config.json`):
+
+1. **Immediate Execution** (default - recommended for paper trading):
+   - Executes buys immediately when STRONG BUY signals are detected
+   - Captures opportunities in real-time without delay
+   - Provides immediate feedback on signal quality
+   - Best for paper trading and educational purposes
+
+2. **Batch Execution at 4 PM** (optional - for real capital):
+   - Queues STRONG BUY signals during market hours
+   - Executes all queued trades at 4 PM ET (market close)
+   - Allows final human review before committing real capital
+   - Optimizes pricing through market close execution
+   - Re-validates signals before trading to prevent stale trades
+
+**Buy Queue Manager** (`core/buy_queue_manager.py`):
+- Thread-safe and process-safe with fcntl file locking
+- Atomic writes using temp file + rename pattern
+- Auto-cleanup of stale entries (>24 hours old)
+- Validation before execution (rejects if score drops >10 points or signal downgrades)
+
 ### System
 - **GET /health** - System health check (tests all 5 agents)
 - **GET /docs** - Swagger UI documentation

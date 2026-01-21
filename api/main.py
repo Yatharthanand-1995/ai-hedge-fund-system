@@ -40,6 +40,40 @@ from cachetools import TTLCache
 from dotenv import load_dotenv
 load_dotenv()  # Load .env file from project root
 
+# AWS Secrets Manager integration - gracefully degrades if not available
+def get_secret(secret_name: str, region_name: str = 'us-east-1') -> Optional[str]:
+    """
+    Fetch secret from AWS Secrets Manager.
+    Falls back to environment variables if AWS SDK is not available or secret not found.
+
+    Args:
+        secret_name: Full secret name (e.g., 'hedgefund/production/gemini-api-key')
+        region_name: AWS region (default: us-east-1)
+
+    Returns:
+        Secret value as string, or None if not found
+    """
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        client = boto3.client('secretsmanager', region_name=region_name)
+        response = client.get_secret_value(SecretId=secret_name)
+        return response['SecretString']
+    except ImportError:
+        # boto3 not installed - graceful degradation
+        return None
+    except ClientError as e:
+        # Secret not found or access denied - graceful degradation
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            pass  # Secret doesn't exist yet
+        elif e.response['Error']['Code'] == 'AccessDeniedException':
+            pass  # No permission to access secret
+        return None
+    except Exception:
+        # Any other error - graceful degradation
+        return None
+
 # Optional Sentry error tracking - gracefully degrades if not configured
 try:
     import sentry_sdk
@@ -1173,6 +1207,10 @@ async def get_top_picks(limit: int = 12):
         for analysis in sorted_analyses[:limit]:
             narrative = analysis["narrative"]
             market_data = analysis["market_data"]
+
+            # Add alias for frontend compatibility (change_percent = price_change_percent)
+            if "price_change_percent" in market_data and "change_percent" not in market_data:
+                market_data["change_percent"] = market_data["price_change_percent"]
 
             # Get sector information
             sector = "Unknown"
@@ -2424,10 +2462,11 @@ async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
     """
     Scan market for auto-buy opportunities.
 
-    Analyzes top stocks from the universe and identifies buy opportunities
-    based on auto-buy rules (score, recommendation, confidence).
+    Behavior depends on execution_mode in auto_buy_config.json:
+    - 'immediate': Executes buys immediately and returns results
+    - 'batch_4pm': Queues opportunities for 4 PM batch execution
 
-    Does NOT execute buys - just returns recommendations.
+    Returns identified opportunities and execution status.
     """
     try:
         from core.auto_buy_monitor import AutoBuyMonitor
@@ -2463,10 +2502,58 @@ async def scan_opportunities_for_auto_buy(universe_limit: int = 50):
             portfolio_positions=portfolio_with_prices.get('positions', {})
         )
 
+        # Check execution mode
+        execution_mode = monitor.rules.execution_mode
+        executed_buys = []
+
+        if execution_mode == 'immediate' and opportunities:
+            # Execute immediately in immediate mode
+            logger.info(f"🚀 Immediate execution mode: executing {len(opportunities)} opportunities now")
+
+            for opp in opportunities:
+                try:
+                    symbol = opp['symbol']
+                    shares = opp['shares']
+
+                    # Execute buy
+                    result = paper_portfolio.buy(symbol, shares)
+
+                    executed_buys.append({
+                        'symbol': symbol,
+                        'shares': shares,
+                        'price': result.get('price', 0),
+                        'total_cost': result.get('total_cost', 0),
+                        'score': opp['score'],
+                        'recommendation': opp['recommendation']
+                    })
+
+                    logger.info(f"✅ Bought {shares} shares of {symbol} @ ${result.get('price', 0):.2f}")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to buy {opp['symbol']}: {e}")
+
+        elif execution_mode == 'batch_4pm' and opportunities:
+            # Queue for 4 PM batch execution
+            logger.info(f"📋 Batch mode: queuing {len(opportunities)} opportunities for 4 PM execution")
+            from core.buy_queue_manager import BuyQueueManager
+            queue_manager = BuyQueueManager()
+
+            for opp in opportunities:
+                queue_manager.enqueue(
+                    symbol=opp['symbol'],
+                    score=opp['score'],
+                    signal=opp['recommendation'],
+                    price=opp.get('current_price'),
+                    reason=f"Auto-buy: {opp['reason']}"
+                )
+
         return {
             "success": True,
+            "execution_mode": execution_mode,
             "opportunities": opportunities,
             "count": len(opportunities),
+            "executed_buys": executed_buys,
+            "executed_count": len(executed_buys),
             "analyzed": len(analyses),
             "rules": monitor.get_rules(),
             "portfolio_state": {
@@ -2577,6 +2664,50 @@ async def get_auto_buy_alerts(limit: int = 50):
 
     except Exception as e:
         logger.error(f"Get auto-buy alerts error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/portfolio/paper/auto-buy/queue", tags=["Paper Trading - Automation"])
+async def get_buy_queue_status():
+    """
+    Get queued buy opportunities awaiting batch execution.
+
+    The system uses batch execution at 4 PM ET (market close) for optimal pricing.
+    This endpoint returns all opportunities currently queued for the next batch.
+
+    Returns:
+        - queued_buys: List of opportunities with scores, signals, and queue time
+        - count: Number of opportunities queued
+        - next_execution: Next scheduled batch execution time
+        - batch_mode_enabled: Whether batch execution is active
+    """
+    try:
+        from core.buy_queue_manager import BuyQueueManager
+        from core.auto_buy_monitor import AutoBuyMonitor
+
+        queue_manager = BuyQueueManager()
+        monitor = AutoBuyMonitor()
+
+        # Get queued opportunities (peek without removing)
+        queued_opportunities = queue_manager.peek()
+
+        # Get auto-buy rules to check execution mode
+        rules = monitor.get_rules()
+        execution_mode = rules.get('execution_mode', 'immediate')
+        batch_mode = execution_mode == 'batch_4pm'
+
+        return {
+            "success": True,
+            "execution_mode": execution_mode,
+            "queued_buys": queued_opportunities,
+            "count": len(queued_opportunities),
+            "next_execution": "4:00 PM ET (Market Close)" if batch_mode else "Immediate (on signal detection)",
+            "batch_mode_enabled": batch_mode,
+            "queue_file": "data/buy_queue.json"
+        }
+
+    except Exception as e:
+        logger.error(f"Get buy queue status error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -34,6 +34,9 @@ interface Stock {
 }
 
 export const StockAnalysisPage: React.FC = () => {
+  // Demo mode configuration for Vercel deployment
+  const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
     recommendation: '',
@@ -206,6 +209,45 @@ export const StockAnalysisPage: React.FC = () => {
         </button>
       </div>
 
+      {/* Demo Banner - Only shown in demo mode */}
+      {DEMO_MODE && (
+        <div className="professional-card p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+          <div className="flex items-start space-x-4">
+            <div className="text-4xl">🚀</div>
+            <div>
+              <h2 className="text-2xl font-bold text-blue-900 mb-2">
+                Live Demo: AI-Powered Stock Analysis System
+              </h2>
+              <p className="text-blue-800 mb-3">
+                This system analyzes 50 elite stocks using 5 specialized AI agents with weighted scoring:
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                <div className="bg-white/60 rounded-lg p-2 border border-blue-100">
+                  <div className="font-semibold text-blue-900">Fundamentals</div>
+                  <div className="text-blue-700">36% weight</div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-2 border border-blue-100">
+                  <div className="font-semibold text-blue-900">Momentum</div>
+                  <div className="text-blue-700">27% weight</div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-2 border border-blue-100">
+                  <div className="font-semibold text-blue-900">Quality</div>
+                  <div className="text-blue-700">18% weight</div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-2 border border-blue-100">
+                  <div className="font-semibold text-blue-900">Sentiment</div>
+                  <div className="text-blue-700">9% weight</div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-2 border border-blue-100">
+                  <div className="font-semibold text-blue-900">Inst. Flow</div>
+                  <div className="text-blue-700">10% weight</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Loading State */}
       {isLoading && (
         <div className="professional-card p-12">
@@ -226,15 +268,30 @@ export const StockAnalysisPage: React.FC = () => {
       {/* Error State */}
       {error && !isLoading && (
         <div className="professional-card p-6 bg-red-50 border border-red-200">
-          <div className="flex items-center space-x-3">
-            <div className="text-red-400 text-xl">⚠️</div>
-            <div>
-              <h3 className="text-lg font-semibold text-red-900 mb-1">
-                Failed to Load Data
+          <div className="flex items-start space-x-3">
+            <div className="text-red-400 text-2xl">⚠️</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-red-900 mb-2">
+                {DEMO_MODE ? 'API Connection Required' : 'Failed to Load Data'}
               </h3>
-              <p className="text-red-700">
-                {error instanceof Error ? error.message : 'Unable to fetch stock data. Please try again.'}
+              <p className="text-red-700 mb-3">
+                {DEMO_MODE
+                  ? 'This demo requires the backend API to be running to display live stock data.'
+                  : (error instanceof Error ? error.message : 'Unable to fetch stock data. Please try again.')
+                }
               </p>
+              {DEMO_MODE && (
+                <div className="bg-white/60 rounded-lg p-4 border border-red-100">
+                  <p className="text-red-800 text-sm mb-2">
+                    <strong>For Demo Viewers:</strong> This is a live demonstration of an AI-powered hedge fund analysis system.
+                    The system requires a local backend API to fetch real-time stock data.
+                  </p>
+                  <p className="text-red-800 text-sm">
+                    <strong>For Developers:</strong> Ensure the API server is running on <code className="bg-red-100 px-1 rounded">localhost:8010</code>.
+                    Run <code className="bg-red-100 px-1 rounded">./start_system.sh</code> to start the full system locally.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

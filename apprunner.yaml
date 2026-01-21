@@ -1,0 +1,23 @@
+version: 1.0
+runtime: python311
+build:
+  commands:
+    pre-build:
+      - echo "Installing system dependencies..."
+    build:
+      - echo "Building application..."
+    post-build:
+      - echo "Build complete"
+
+run:
+  runtime-version: 3.11
+  command: uvicorn api.main:app --host 0.0.0.0 --port 8010
+  network:
+    port: 8010
+    env: APP_PORT
+  env:
+    - name: LLM_PROVIDER
+      value: gemini
+    - name: PYTHONUNBUFFERED
+      value: "1"
+  # Secrets are set via AWS console (not in file)

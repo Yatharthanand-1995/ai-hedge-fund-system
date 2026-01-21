@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+venv
+env
+
+# Frontend
+frontend/
+node_modules/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Data files
+data/*.json
+data/*.csv
+data/*.db
+*.log
+nohup.out
+nohup_final.out
+nohup_new.out
+
+# Tests
+tests/
+test_*.py
+pytest.ini
+.coverage
+
+# Deployment configs (we use Dockerfile instead)
+railway.toml
+render.yaml
+vercel.json
+.vercelignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Temporary files
+tmp/
+*.tmp
+.DS_Store
+
+# Lock files
+data/paper_portfolio.lock

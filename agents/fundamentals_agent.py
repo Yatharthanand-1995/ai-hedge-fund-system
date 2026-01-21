@@ -94,7 +94,11 @@ class FundamentalsAgent:
             ) / 4.0
 
             # Confidence based on data availability
-            confidence = self._calculate_confidence(info, financials, balance_sheet)
+            initial_confidence = self._calculate_confidence(info, financials, balance_sheet)
+            confidence = initial_confidence
+
+            # Log initial confidence
+            logger.debug(f"{symbol} fundamentals initial confidence: {initial_confidence:.2f}")
 
             # Enhanced confidence with data quality validation
             if DATA_VALIDATOR_AVAILABLE:
@@ -102,8 +106,23 @@ class FundamentalsAgent:
                     data_quality = data_validator.validate_fundamentals_data(info, financials, balance_sheet)
                     confidence = data_validator.get_quality_adjusted_confidence(confidence, data_quality)
                     logger.debug(f"Data quality validation for {symbol}: {data_quality['quality_score']:.2f}")
+
+                    # Warn if confidence changed significantly
+                    if abs(confidence - initial_confidence) > 0.2:
+                        logger.warning(
+                            f"{symbol} confidence changed significantly: {initial_confidence:.2f} → {confidence:.2f} "
+                            f"(quality_score: {data_quality['quality_score']:.2f}, "
+                            f"missing: {len(data_quality.get('missing_critical', []))})"
+                        )
                 except Exception as e:
                     logger.warning(f"Data quality validation failed for {symbol}: {e}")
+
+            # Ensure absolute minimum confidence even after data quality penalties
+            confidence = max(confidence, 0.3)
+
+            # Log final confidence if it hit the minimum threshold
+            if confidence == 0.3 and initial_confidence != 0.3:
+                logger.info(f"{symbol} confidence capped at minimum: {initial_confidence:.2f} → 0.30")
 
             # Build reasoning
             reasoning = self._build_reasoning(

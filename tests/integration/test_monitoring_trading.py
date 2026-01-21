@@ -13,7 +13,7 @@ import pytest
 import json
 import tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
 
 from core.buy_queue_manager import BuyQueueManager
@@ -113,7 +113,7 @@ class TestBuyQueueIntegration:
         """Test that stale entries (>24 hours old) are removed."""
         # Manually create queue with stale entry
         stale_time = "2026-01-01T10:00:00Z"  # 2 days ago
-        recent_time = datetime.utcnow().isoformat() + "Z"
+        recent_time = datetime.now(timezone.utc).isoformat() + "Z"
 
         data = {
             "queued_opportunities": [

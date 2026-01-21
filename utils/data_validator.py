@@ -186,11 +186,11 @@ class DataQualityValidator:
         # Adjust for data freshness
         multiplier *= (0.7 + 0.3 * freshness)
 
-        # Penalty for missing critical metrics
-        if missing_count > 5:  # More than half missing
-            multiplier *= 0.6
-        elif missing_count > 3:
-            multiplier *= 0.8
+        # Penalty for missing critical metrics (relaxed thresholds for real-world data quality)
+        if missing_count > 7:  # Raised threshold from 5 to 7
+            multiplier *= 0.85  # Reduced penalty from 0.6 to 0.85
+        elif missing_count > 5:  # Raised threshold from 3 to 5
+            multiplier *= 0.95  # Reduced penalty from 0.8 to 0.95
 
         # Ensure minimum confidence
         return max(multiplier, 0.2)

@@ -7,17 +7,19 @@ import { hasExperimentalFeatures } from '../../config/featureFlags';
 interface NavigationProps {
   currentPage: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts';
   onPageChange: (page: 'dashboard' | 'analysis' | 'portfolio' | 'backtesting' | 'paper-trading' | 'system-details' | 'alerts') => void;
+  demoMode?: boolean;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
   currentPage,
   onPageChange,
+  demoMode = false,
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const hasExperimental = hasExperimentalFeatures();
 
-  const navItems = [
+  const allNavItems = [
     { id: 'dashboard' as const, label: 'System Overview', icon: '🏦', shortcut: '1' },
     { id: 'analysis' as const, label: 'Stock Analysis', icon: '📊', shortcut: '2' },
     { id: 'portfolio' as const, label: 'Portfolio Manager', icon: '📈', shortcut: '3' },
@@ -26,6 +28,11 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'alerts' as const, label: 'System Alerts', icon: '🔔', shortcut: '6' },
     { id: 'system-details' as const, label: 'System Details', icon: '📚', shortcut: '7' },
   ];
+
+  // Filter navigation items based on demo mode
+  const navItems = demoMode
+    ? allNavItems.filter(item => item.id === 'analysis')
+    : allNavItems;
 
   // Keyboard navigation support
   useEffect(() => {
