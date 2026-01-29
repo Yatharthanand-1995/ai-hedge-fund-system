@@ -31,7 +31,7 @@ class BuyQueueManager:
     during market hours and executed at 4 PM batch execution.
     """
 
-    def __init__(self, queue_file: str = "data/buy_queue.json"):
+    def __init__(self, queue_file: str = "data/runtime/buy_queue.json"):
         """
         Initialize buy queue manager.
 

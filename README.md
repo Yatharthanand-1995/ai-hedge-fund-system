@@ -311,6 +311,44 @@ pip install -r requirements.txt
 pip install -r requirements-optional.txt
 ```
 
+## 📁 Project Organization (Updated January 2026)
+
+The codebase has been professionally organized into a clean, maintainable structure:
+
+### Documentation Structure
+```
+docs/
+├── README.md              # Comprehensive navigation index
+├── architecture/          # System design (4 files)
+├── development/           # Implementation & fixes (10 files)
+├── operations/            # Deployment & monitoring (5 files)
+├── features/              # Feature documentation (3 files)
+├── archive_docs/          # Historical docs (3 files)
+└── reports/               # Phase completion reports (6 files)
+```
+
+### Data Organization
+```
+data/
+├── config/                # Configuration files (tracked by git)
+│   ├── auto_buy_config.json
+│   ├── auto_sell_config.json
+│   └── monitoring_config.json
+└── runtime/               # Runtime data (gitignored)
+    ├── paper_portfolio.json
+    ├── buy_queue.json
+    └── execution logs
+```
+
+**Benefits**:
+- ✅ Clear separation of configuration vs runtime data
+- ✅ Configuration files version-controlled
+- ✅ Documentation organized by category
+- ✅ Professional root directory (only essential files)
+- ✅ Easy to navigate and maintain
+
+See [docs/README.md](docs/README.md) for complete documentation navigation.
+
 ## 🤝 Contributing
 
 1. Ensure all 5 agents are working correctly
@@ -318,7 +356,9 @@ pip install -r requirements-optional.txt
 3. Maintain the weighted scoring system (36/27/18/9/10)
 4. Follow the organized test structure in `/tests/`
 5. Update documentation for any new features
-4. Follow the existing code structure and patterns
+6. Follow the existing code structure and patterns
+7. Configuration files go in `data/config/` (tracked by git)
+8. Runtime data goes in `data/runtime/` (gitignored)
 
 ## 📄 License
 

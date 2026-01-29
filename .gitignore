@@ -140,6 +140,7 @@ data/cache/
 data/temp/
 *.csv
 *.json
+!data/config/*.json  # Exception: DO commit config files
 *.pickle
 *.pkl
 
@@ -150,6 +151,7 @@ logs/
 # Runtime files
 nohup*.out
 data/paper_portfolio.lock
+data/*.lock
 data/runtime/
 data_backup_*/
 

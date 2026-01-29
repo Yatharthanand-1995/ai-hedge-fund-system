@@ -1,0 +1,40 @@
+{
+  "system_active": true,
+  "monitoring": {
+    "enabled": true,
+    "portfolio_check_interval_minutes": 30,
+    "watchlist_check_interval_hours": 2,
+    "full_scan_time": "16:00",
+    "market_hours_only": true,
+    "hot_watchlist": [
+      "GOOGL",
+      "MRK",
+      "AAPL",
+      "NVDA",
+      "MSFT"
+    ]
+  },
+  "triggers": {
+    "price_change_threshold_percent": 5.0,
+    "volume_spike_threshold_multiplier": 2.0,
+    "min_score_change_to_log": 3.0
+  },
+  "execution": {
+    "enabled_when_active": true,
+    "immediate_sells_on_critical": true,
+    "immediate_sells_on_high": false,
+    "batch_buys_at_4pm": true,
+    "max_trades_per_hour": 5,
+    "min_holding_period_days": 3
+  },
+  "notifications": {
+    "log_all_changes": true,
+    "alert_on_critical": false,
+    "alert_on_high": false,
+    "daily_summary": true
+  },
+  "history": {
+    "keep_changes_days": 90,
+    "auto_cleanup": true
+  }
+}

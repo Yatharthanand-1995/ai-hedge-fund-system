@@ -20,8 +20,8 @@ class PaperPortfolioManager:
     """Manages paper trading portfolio with transaction logging."""
 
     INITIAL_CASH = 10000.0
-    PORTFOLIO_FILE = "data/paper_portfolio.json"
-    TRANSACTION_LOG_FILE = "data/transaction_log.json"
+    PORTFOLIO_FILE = "data/runtime/paper_portfolio.json"
+    TRANSACTION_LOG_FILE = "data/runtime/transaction_log.json"
 
     def __init__(self):
         """Initialize portfolio manager."""

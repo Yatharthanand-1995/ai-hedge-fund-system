@@ -3,7 +3,8 @@
 This directory contains temporary files and artifacts from the backtesting development phase that are no longer needed for production operation but are preserved for reference.
 
 ## Archive Date
-October 14, 2025
+**Original Archive**: October 14, 2025
+**Last Verified**: January 29, 2026 (Phase 5 - Cleanup Project)
 
 ## Contents Summary
 
@@ -78,10 +79,13 @@ Hardcoded static backtest data files:
 
 The active, production-ready system remains in:
 - `/api/` - FastAPI backend
-- `/agents/` - 4 specialized agents
+- `/agents/` - 5 specialized agents (Fundamentals, Momentum, Quality, Sentiment, Institutional Flow)
 - `/core/` - Core business logic
 - `/frontend/` - React frontend application
 - `/tests/` - Official test suite
+- `/data/config/` - Configuration files (tracked by git)
+- `/data/runtime/` - Runtime data (gitignored)
+- `/docs/` - Organized documentation
 
 ## Restoration
 
@@ -94,12 +98,22 @@ cp archive/backtest_scripts/run_5year_backtest.py ./
 
 ## Verification
 
-After archiving, the following tests were run successfully:
+**Original Verification (October 2025)**:
 - ✅ All Python imports working correctly
 - ✅ All 4 agents initializing successfully
 - ✅ System tests passing (tests/test_system.py)
 - ✅ Frontend build completing (with minor linting warnings)
 - ✅ API server starting correctly
+
+**Re-verified (January 2026 - Phase 4 Testing)**:
+- ✅ All 14 core modules import successfully
+- ✅ All 5 agents (including new Institutional Flow agent) operational
+- ✅ 29 comprehensive tests passed (100%)
+- ✅ Zero breakage after documentation/data reorganization
+- ✅ Configuration loading from new paths (data/config/)
+- ✅ Runtime data accessible from new paths (data/runtime/)
+- ✅ Full 5-agent analysis working (tested with AAPL)
+- ✅ Paper trading, auto-buy, and queue managers operational
 
 ## Notes
 

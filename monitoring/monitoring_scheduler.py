@@ -52,7 +52,7 @@ class MonitoringScheduler:
 
     def _load_config(self) -> dict:
         """Load monitoring configuration."""
-        config_file = Path("data/monitoring_config.json")
+        config_file = Path("data/config/monitoring_config.json")
         if config_file.exists():
             try:
                 with open(config_file, 'r') as f:
@@ -73,7 +73,7 @@ class MonitoringScheduler:
 
     def _get_config_mtime(self) -> float:
         """Get config file modification time."""
-        config_file = Path("data/monitoring_config.json")
+        config_file = Path("data/config/monitoring_config.json")
         try:
             return config_file.stat().st_mtime if config_file.exists() else 0
         except Exception as e:

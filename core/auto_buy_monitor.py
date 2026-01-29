@@ -52,8 +52,8 @@ class AutoBuyRule:
 class AutoBuyMonitor:
     """Monitors market and triggers auto-buys based on rules."""
 
-    CONFIG_FILE = "data/auto_buy_config.json"
-    ALERTS_FILE = "data/auto_buy_alerts.json"
+    CONFIG_FILE = "data/config/auto_buy_config.json"
+    ALERTS_FILE = "data/runtime/auto_buy_alerts.json"
 
     def __init__(self):
         """Initialize auto-buy monitor."""
