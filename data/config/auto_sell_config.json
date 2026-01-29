@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "stop_loss_percent": -10.0,
+  "take_profit_percent": 20.0,
+  "watch_ai_signals": true,
+  "max_position_age_days": 180,
+  "prioritize_ai_signals": true,
+  "defer_take_profit_on_strong_signals": true,
+  "ai_signal_sell_threshold": 50.0
+}

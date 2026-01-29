@@ -2703,7 +2703,7 @@ async def get_buy_queue_status():
             "count": len(queued_opportunities),
             "next_execution": "4:00 PM ET (Market Close)" if batch_mode else "Immediate (on signal detection)",
             "batch_mode_enabled": batch_mode,
-            "queue_file": "data/buy_queue.json"
+            "queue_file": "data/runtime/buy_queue.json"
         }
 
     except Exception as e:
@@ -3321,7 +3321,7 @@ async def activate_monitoring():
         import json
         from pathlib import Path
 
-        config_file = Path("data/monitoring_config.json")
+        config_file = Path("data/config/monitoring_config.json")
         if not config_file.exists():
             raise HTTPException(status_code=404, detail="Monitoring configuration not found")
 
@@ -3368,7 +3368,7 @@ async def deactivate_monitoring():
         import json
         from pathlib import Path
 
-        config_file = Path("data/monitoring_config.json")
+        config_file = Path("data/config/monitoring_config.json")
         if not config_file.exists():
             raise HTTPException(status_code=404, detail="Monitoring configuration not found")
 

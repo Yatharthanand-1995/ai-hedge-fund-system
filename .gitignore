@@ -140,6 +140,7 @@ data/cache/
 data/temp/
 *.csv
 *.json
+!data/config/*.json  # Exception: DO commit config files
 *.pickle
 *.pkl
 
