@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for the 4-agent hedge fund system
+Test script for the 5-agent hedge fund system
 """
 
 import sys
@@ -9,8 +9,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def test_agents():
-    """Test all 4 agents with AAPL"""
-    print("Testing 4-Agent AI Hedge Fund System")
+    """Test all 5 agents with AAPL"""
+    print("Testing 5-Agent AI Hedge Fund System")
     print("="*50)
 
     try:
@@ -57,8 +57,16 @@ def test_agents():
         print(f"   Sentiment Score: {sentiment_result['score']}/100")
         print(f"   Confidence: {sentiment_result['confidence']}")
 
+        # Test Institutional Flow Agent
+        print("\n5. Testing Institutional Flow Agent...")
+        from agents.institutional_flow_agent import InstitutionalFlowAgent
+        inst_flow_agent = InstitutionalFlowAgent()
+        inst_flow_result = inst_flow_agent.analyze("AAPL", aapl_data['historical_data'], aapl_data)
+        print(f"   Institutional Flow Score: {inst_flow_result['score']}/100")
+        print(f"   Confidence: {inst_flow_result['confidence']}")
+
         # Test Narrative Engine
-        print("\n5. Testing Narrative Engine...")
+        print("\n6. Testing Narrative Engine...")
         from narrative_engine.narrative_engine import InvestmentNarrativeEngine
         narrative_engine = InvestmentNarrativeEngine()
 
@@ -66,12 +74,13 @@ def test_agents():
             'fundamentals': fund_result,
             'momentum': momentum_result,
             'quality': quality_result,
-            'sentiment': sentiment_result
+            'sentiment': sentiment_result,
+            'institutional_flow': inst_flow_result
         }
 
         narrative = narrative_engine.generate_comprehensive_thesis("AAPL", agent_results)
 
-        print(f"\n6. COMPLETE ANALYSIS RESULTS FOR AAPL:")
+        print(f"\n7. COMPLETE ANALYSIS RESULTS FOR AAPL:")
         print("="*60)
         print(f"Overall Score: {narrative['overall_score']}/100")
         print(f"Recommendation: {narrative['recommendation']}")

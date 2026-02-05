@@ -84,7 +84,7 @@ class InvestmentNarrativeEngine:
             # Gemini setup
             if GEMINI_AVAILABLE and os.getenv('GEMINI_API_KEY'):
                 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-                self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_client = genai.GenerativeModel('gemini-2.5-flash')
                 logger.info("Gemini client initialized")
 
         except Exception as e:
@@ -364,15 +364,16 @@ class InvestmentNarrativeEngine:
 
         # Build detailed prompt with all available data
         prompt = f"""
-Generate a comprehensive investment thesis for {company_name} ({symbol}) based on our 4-agent quantitative analysis.
+Generate a comprehensive investment thesis for {company_name} ({symbol}) based on our 5-agent quantitative analysis.
 
 OVERALL SCORE: {overall_score:.1f}/100
 
 AGENT ANALYSIS BREAKDOWN:
-• Fundamentals Agent (40% weight): {agent_scores['fundamentals']}/100
-• Momentum Agent (30% weight): {agent_scores['momentum']}/100
-• Quality Agent (20% weight): {agent_scores['quality']}/100
-• Sentiment Agent (10% weight): {agent_scores['sentiment']}/100
+• Fundamentals Agent (36% weight): {agent_scores['fundamentals']}/100
+• Momentum Agent (27% weight): {agent_scores['momentum']}/100
+• Quality Agent (18% weight): {agent_scores['quality']}/100
+• Sentiment Agent (9% weight): {agent_scores['sentiment']}/100
+• Institutional Flow Agent (10% weight): {agent_scores.get('institutional_flow', 0)}/100
 
 DETAILED METRICS:
 Fundamentals: {json.dumps(data['fundamentals_metrics'], indent=2)}
@@ -387,7 +388,7 @@ Please provide a sophisticated investment thesis that includes:
 1. EXECUTIVE SUMMARY (2-3 sentences): Key investment thesis and recommendation
 
 2. QUANTITATIVE ASSESSMENT:
-   - Analysis of the 4-agent scores and what they reveal
+   - Analysis of the 5-agent scores and what they reveal
    - Key strengths and weaknesses identified by our models
    - Risk-adjusted return expectations
 
